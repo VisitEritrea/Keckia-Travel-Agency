@@ -1,0 +1,8 @@
+{
+  "name": "EritreaVisit Operations Suite",
+  "description": "Unified tour operations, HR, ticketing, visas, hotel bookings, transport fleet, and finance management suite for EritreaVisit.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

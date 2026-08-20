@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="EritreaVisit">
+  <title>EritreaVisit</title>
+  <rect width="64" height="64" rx="14" fill="#ffffff"/>
+  <circle cx="32" cy="32" r="23" fill="none" stroke="#12AEEB" stroke-width="4.5"/>
+  <g fill="#EF5423">
+    <!-- Asmara horizon -->
+    <path d="M10 37.4c7.4-2.1 14.8-3.1 22-3.1s14.6 1 22 3.1v2.2c-7.4-1.5-14.8-2.3-22-2.3s-14.6.8-22 2.3z"/>
+    <!-- Fiat Tagliero / monument silhouette -->
+    <rect x="27.4" y="31.2" width="9.2" height="3.4"/>
+    <rect x="28.8" y="18.6" width="6.4" height="12.6"/>
+    <rect x="29.6" y="9.4" width="1.5" height="9.6"/>
+    <rect x="32.9" y="9.4" width="1.5" height="9.6"/>
+    <path d="M31.2 21.6h1.6v5.6l1.5-.6-2.3 3.4-2.3-3.4 1.5.6z"/>
+  </g>
+</svg>

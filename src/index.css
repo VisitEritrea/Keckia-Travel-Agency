@@ -1,0 +1,398 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * Brand palette — taken straight from the EritreaVisit logo.
+ *
+ * The mark uses exactly two colours: the terracotta orange of the wordmark
+ * and Asmara's Fiat Tagliero silhouette (#EF5423), and the Red Sea cyan of
+ * the surrounding ring (#12AEEB). Everything in the suite is built from
+ * ramps generated around those two hues so no screen introduces a colour the
+ * logo would not agree with.
+ *
+ * The suite was originally styled with Tailwind's stock amber / sky / blue
+ * palettes across ~50 screens. Rather than rewrite thousands of class names,
+ * the stock ramps are re-pointed at the brand ramps here: `amber-*` and
+ * `orange-*` now render the logo terracotta, `sky-*`, `blue-*` and `cyan-*`
+ * render the logo cyan. One file therefore governs the whole colour story.
+ * ------------------------------------------------------------------ */
+@theme {
+  /* Logo terracotta — primary action, highlights, active navigation. */
+  --color-brand-50: #fef5f1;
+  --color-brand-100: #fde7dd;
+  --color-brand-200: #fbcbb7;
+  --color-brand-300: #f8a687;
+  --color-brand-400: #f47c53;
+  --color-brand-500: #ef5423;
+  --color-brand-600: #dc4116;
+  --color-brand-700: #b73114;
+  --color-brand-800: #922a17;
+  --color-brand-900: #762616;
+  --color-brand-950: #400f08;
+
+  /* Logo cyan — data, links, secondary emphasis, the Red Sea accent. */
+  --color-lagoon-50: #eefaff;
+  --color-lagoon-100: #d9f3fe;
+  --color-lagoon-200: #b9eafd;
+  --color-lagoon-300: #83ddfc;
+  --color-lagoon-400: #45c8f8;
+  --color-lagoon-500: #12aeeb;
+  --color-lagoon-600: #068cc8;
+  --color-lagoon-700: #0870a2;
+  --color-lagoon-800: #105e86;
+  --color-lagoon-900: #134e6f;
+  --color-lagoon-950: #0c334b;
+
+  /* Sand — warm neutral used for page backgrounds and document paper. */
+  --color-sand-50: #fbf8f5;
+  --color-sand-100: #f6efe9;
+  --color-sand-200: #ecdfd4;
+
+  /* --- stock ramps re-pointed at the brand ------------------------- */
+  --color-amber-50: var(--color-brand-50);
+  --color-amber-100: var(--color-brand-100);
+  --color-amber-200: var(--color-brand-200);
+  --color-amber-300: var(--color-brand-300);
+  --color-amber-400: var(--color-brand-400);
+  --color-amber-500: var(--color-brand-500);
+  --color-amber-600: var(--color-brand-600);
+  --color-amber-700: var(--color-brand-700);
+  --color-amber-800: var(--color-brand-800);
+  --color-amber-900: var(--color-brand-900);
+  --color-amber-950: var(--color-brand-950);
+
+  --color-orange-50: var(--color-brand-50);
+  --color-orange-100: var(--color-brand-100);
+  --color-orange-200: var(--color-brand-200);
+  --color-orange-300: var(--color-brand-300);
+  --color-orange-400: var(--color-brand-400);
+  --color-orange-500: var(--color-brand-500);
+  --color-orange-600: var(--color-brand-600);
+  --color-orange-700: var(--color-brand-700);
+  --color-orange-800: var(--color-brand-800);
+  --color-orange-900: var(--color-brand-900);
+  --color-orange-950: var(--color-brand-950);
+
+  --color-sky-50: var(--color-lagoon-50);
+  --color-sky-100: var(--color-lagoon-100);
+  --color-sky-200: var(--color-lagoon-200);
+  --color-sky-300: var(--color-lagoon-300);
+  --color-sky-400: var(--color-lagoon-400);
+  --color-sky-500: var(--color-lagoon-500);
+  --color-sky-600: var(--color-lagoon-600);
+  --color-sky-700: var(--color-lagoon-700);
+  --color-sky-800: var(--color-lagoon-800);
+  --color-sky-900: var(--color-lagoon-900);
+  --color-sky-950: var(--color-lagoon-950);
+
+  --color-cyan-50: var(--color-lagoon-50);
+  --color-cyan-100: var(--color-lagoon-100);
+  --color-cyan-200: var(--color-lagoon-200);
+  --color-cyan-300: var(--color-lagoon-300);
+  --color-cyan-400: var(--color-lagoon-400);
+  --color-cyan-500: var(--color-lagoon-500);
+  --color-cyan-600: var(--color-lagoon-600);
+  --color-cyan-700: var(--color-lagoon-700);
+  --color-cyan-800: var(--color-lagoon-800);
+  --color-cyan-900: var(--color-lagoon-900);
+  --color-cyan-950: var(--color-lagoon-950);
+
+  /* Blue keeps a touch more depth than cyan so the two never flatten into
+     one another when a screen uses both. */
+  --color-blue-50: #eff8fe;
+  --color-blue-100: #dcf0fd;
+  --color-blue-200: #bce3fb;
+  --color-blue-300: #8ad0f8;
+  --color-blue-400: #4fb6f0;
+  --color-blue-500: #2799dd;
+  --color-blue-600: #167abb;
+  --color-blue-700: #146298;
+  --color-blue-800: #16537d;
+  --color-blue-900: #174668;
+  --color-blue-950: #0f2c45;
+
+  /* Supporting hues, nudged toward the brand so charts and status chips sit
+     in the same family: a sea-green success, a coral-leaning danger and a
+     muted iris for informational accents. */
+  --color-emerald-50: #ecfdf6;
+  --color-emerald-100: #d1fae9;
+  --color-emerald-200: #a7f3d6;
+  --color-emerald-300: #6ee7bf;
+  --color-emerald-400: #34d3a4;
+  --color-emerald-500: #0fb287;
+  --color-emerald-600: #059070;
+  --color-emerald-700: #04735c;
+  --color-emerald-800: #075b4a;
+  --color-emerald-900: #084b3e;
+  --color-emerald-950: #022c24;
+
+  --color-rose-50: #fff1f2;
+  --color-rose-100: #ffe1e3;
+  --color-rose-200: #ffc8cc;
+  --color-rose-300: #ffa1a8;
+  --color-rose-400: #fb6b78;
+  --color-rose-500: #ef3b4e;
+  --color-rose-600: #db1f36;
+  --color-rose-700: #b8162b;
+  --color-rose-800: #99162a;
+  --color-rose-900: #82182a;
+  --color-rose-950: #480711;
+
+  --color-purple-50: #f4f3ff;
+  --color-purple-100: #ebe9fe;
+  --color-purple-200: #d9d6fe;
+  --color-purple-300: #beb5fd;
+  --color-purple-400: #9f8afa;
+  --color-purple-500: #825df5;
+  --color-purple-600: #713bec;
+  --color-purple-700: #6229d8;
+  --color-purple-800: #5222b5;
+  --color-purple-900: #451e94;
+  --color-purple-950: #291065;
+
+  --color-violet-50: var(--color-purple-50);
+  --color-violet-100: var(--color-purple-100);
+  --color-violet-200: var(--color-purple-200);
+  --color-violet-300: var(--color-purple-300);
+  --color-violet-400: var(--color-purple-400);
+  --color-violet-500: var(--color-purple-500);
+  --color-violet-600: var(--color-purple-600);
+  --color-violet-700: var(--color-purple-700);
+  --color-violet-800: var(--color-purple-800);
+  --color-violet-900: var(--color-purple-900);
+  --color-violet-950: var(--color-purple-950);
+
+  --color-indigo-50: var(--color-purple-50);
+  --color-indigo-100: var(--color-purple-100);
+  --color-indigo-200: var(--color-purple-200);
+  --color-indigo-300: var(--color-purple-300);
+  --color-indigo-400: var(--color-purple-400);
+  --color-indigo-500: var(--color-purple-500);
+  --color-indigo-600: var(--color-purple-600);
+  --color-indigo-700: var(--color-purple-700);
+  --color-indigo-800: var(--color-purple-800);
+  --color-indigo-900: var(--color-purple-900);
+  --color-indigo-950: var(--color-purple-950);
+
+  /* Neutrals carry a faint cyan cast so greys read as part of the logo
+     rather than as a separate cold palette. */
+  --color-slate-50: #f7f9fb;
+  --color-slate-100: #eef2f6;
+  --color-slate-200: #e1e8ee;
+  --color-slate-300: #c8d4de;
+  --color-slate-400: #93a5b4;
+  --color-slate-500: #67798a;
+  --color-slate-600: #4e6070;
+  --color-slate-700: #3c4d5c;
+  --color-slate-800: #2a3946;
+  --color-slate-900: #17242e;
+  --color-slate-950: #0b161d;
+
+  /* Brand-flavoured shadows: warm lift for primary surfaces. */
+  --shadow-brand: 0 10px 30px -12px rgb(239 84 35 / 0.35);
+  --shadow-lagoon: 0 10px 30px -12px rgb(18 174 235 / 0.35);
+
+  /*
+   * Tailwind's `font-sans` utility (used on the app's root container, and
+   * scattered through a few screens) generates from this token. Left
+   * undefined it falls back to Tailwind's own default stack — a different
+   * font from the one set on `body` below — and because utility classes sit
+   * in a later cascade layer than the base styles, that default silently
+   * wins for every element that doesn't carry its own heading/mono class.
+   * Defining it here keeps `font-sans` and `body` in agreement instead of
+   * fighting over most of the app's text.
+   */
+  --font-sans: 'Plus Jakarta Sans', 'Noto Sans Ethiopic', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /*
+   * Tailwind also ships its own built-in `font-serif` utility (a real serif
+   * fallback stack — Georgia/Times, no web font behind it), which has the
+   * same class name as this file's hand-written `.font-serif` override
+   * below and, being generated into the utilities layer, silently won. Every
+   * heading styled with `font-serif italic` — the look this whole suite's
+   * section titles lean on — was rendering in the browser's default serif
+   * font instead of the intended typeface. Defining it here so both agree.
+   */
+  --font-serif: 'Plus Jakarta Sans', 'Noto Sans Ethiopic', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-slate-200);
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Typography
+   *
+   * 'Noto Sans Ethiopic' sits in every stack, not just a Tigrinya-specific
+   * class, because Ge'ez turns up mid-sentence all over this system — a hotel
+   * letter heading, a staff member's name, a rental requisition title. Naming
+   * it in the fallback chain means the browser reaches for it only for the
+   * characters Plus Jakarta Sans does not carry, and those words render
+   * properly on a machine that has no Ethiopic font of its own.
+   * ---------------------------------------------------------------- */
+  html {
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Ethiopic', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    letter-spacing: -0.006em;
+    /* 15px base: the old 16px default forced a lot of text down to 11px to fit,
+       which is where this interface became tiring to read all day. */
+    font-size: 15px;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-900);
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Ethiopic', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Contextual alternates and disambiguated 1/l/I, so a passport number or a
+       plate is never read wrong. */
+    font-feature-settings: 'cv05' 1, 'cv08' 1, 'cv11' 1, 'ss01' 1, 'calt' 1;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading, .font-display {
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Ethiopic', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: -0.021em;
+    line-height: 1.2;
+    font-weight: 800;
+    text-wrap: balance;
+  }
+
+  /* Kept so the screens that still ask for it inherit the heading face
+     rather than a browser serif — Plus Jakarta Sans carries a real italic,
+     so the editorial look this class is used for is a genuine italic cut,
+     not a synthetic slant. */
+  .font-serif {
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Ethiopic', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: -0.021em;
+    font-style: normal;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-feature-settings: 'zero' 1;
+  }
+
+  /* Figures in tables and totals line up in columns. */
+  table, .tabular-nums, [class*='tabular'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Keyboard focus follows the brand instead of the browser default. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+
+  /* Nothing you can tap should be smaller than a fingertip. */
+  button, [role='button'], a[href], select, summary {
+    touch-action: manipulation;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Small set of brand surfaces reused across the shell.
+ * ------------------------------------------------------------------ */
+/* Deep enough that white text on top clears WCAG AA at small sizes, while the
+   two logo hues still read as a single warm-to-sea sweep. */
+@utility brand-gradient {
+  background-image: linear-gradient(120deg, var(--color-brand-600) 0%, var(--color-brand-700) 48%, var(--color-lagoon-800) 100%);
+}
+
+@utility brand-gradient-text {
+  background-image: linear-gradient(100deg, var(--color-brand-500), var(--color-lagoon-500));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility brand-hairline {
+  background-image: linear-gradient(90deg, var(--color-brand-500), var(--color-lagoon-500));
+}
+
+/* The dark shell used by the sign-in screen and document hero panels:
+   deep ink washed with the two logo hues. */
+@utility brand-ink-panel {
+  background-color: var(--color-slate-950);
+  background-image:
+    radial-gradient(circle at 12% 18%, rgb(239 84 35 / 0.38), transparent 55%),
+    radial-gradient(circle at 82% 74%, rgb(18 174 235 / 0.32), transparent 52%),
+    radial-gradient(circle at 55% 105%, rgb(18 174 235 / 0.18), transparent 60%);
+}
+
+/* Custom scrollbars for clean light elegance */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-slate-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(103 121 138 / 0.28);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(239 84 35 / 0.55);
+}
+
+/* Dedicated Print Stylesheet */
+@media print {
+  body {
+    background: white !important;
+    color: #0f172a !important;
+    font-size: 12pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide navigation, sidebars, topbars, buttons and modals */
+  nav,
+  aside,
+  header,
+  #app-sidebar,
+  #app-topbar,
+  #btn-notifications-toggle,
+  #btn-quick-action,
+  .no-print,
+  button:not(.force-print) {
+    display: none !important;
+  }
+
+  /* Ensure background colors and borders are preserved */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Clean print targets */
+  #printable-voa-letter,
+  #printable-permit-doc,
+  #printable-boarding-pass,
+  #printable-hotel-voucher,
+  #printable-eritreavisit-form,
+  #printable-vehicle-details {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 1cm !important;
+    border: none !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+  }
+
+  @page {
+    margin: 1cm;
+    size: auto;
+  }
+}

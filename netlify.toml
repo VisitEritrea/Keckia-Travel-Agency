@@ -1,0 +1,12 @@
+[build]
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Single-page app: every non-API route serves the React shell.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
