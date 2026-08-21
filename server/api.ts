@@ -4,6 +4,7 @@
  */
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { GoogleGenAI } from "@google/genai";
 import { getDb, checkDatabase, DatabaseUnavailableError } from "../db/index.js";
 import { users, sessions, records, auditLog } from "../db/schema.js";
 import {
@@ -444,10 +445,35 @@ async function syncCollection(
 }
 
 /* ------------------------------------------------------------------ *
- * AI drafting (optional — falls back to a fixed template without a key)
+ * AI drafting & OCR with Gemini (with lazy initialization)
  * ------------------------------------------------------------------ */
 
+let genAiClient: GoogleGenAI | null = null;
+function getGenAi(): GoogleGenAI | null {
+  if (!genAiClient && process.env.GEMINI_API_KEY) {
+    try {
+      genAiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    } catch (err) {
+      console.warn("Failed to initialize GoogleGenAI client:", err);
+    }
+  }
+  return genAiClient;
+}
+
 async function draftWithGemini(prompt: string): Promise<string | null> {
+  const ai = getGenAi();
+  if (ai) {
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.7-flash",
+        contents: prompt,
+      });
+      if (response.text) return response.text;
+    } catch (err) {
+      console.warn("GoogleGenAI draft error, attempting fallback:", err);
+    }
+  }
+
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
   try {
@@ -468,25 +494,68 @@ async function draftWithGemini(prompt: string): Promise<string | null> {
 }
 
 async function ocrPassportWithGemini(imageBase64: string, mimeType: string = "image/jpeg"): Promise<any | null> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
-  try {
-    const cleanBase64 = imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, '');
-    const prompt = `You are an expert passport OCR, MRZ reader and identity verification system for tourist entry visas to Eritrea.
-Analyze the provided passport image, photo page, or travel document.
-Extract the passport fields and return ONLY a valid JSON object with no markdown fences:
+  const cleanBase64 = imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, '').trim();
+  const effectiveMime = mimeType?.includes("pdf") ? "application/pdf" : (mimeType || "image/jpeg");
+
+  const prompt = `You are an expert biometric passport OCR, MRZ reader and identity verification system for tourist visas to the State of Eritrea.
+Carefully analyze the provided passport image, photo page, or travel document.
+Extract all possible identity and travel details and return ONLY a valid JSON object with NO surrounding markdown fences or explanation:
 {
-  "fullName": "Full Legal Name",
+  "fullName": "Full Legal Name as shown on passport",
   "passportNumber": "Passport Number (e.g. GB98234112)",
   "passportExpiry": "YYYY-MM-DD",
   "dob": "YYYY-MM-DD",
-  "nationality": "Nationality name (e.g. British, American, German, French, Italian, Swiss, Japanese)",
+  "nationality": "Full nationality name (e.g. British, United States, German, French, Italian, Swiss, Japanese, Swedish, Canadian, Australian)",
   "gender": "Male or Female",
   "occupation": "Profession or traveler occupation",
+  "email": "Email address if visible or standard traveler handle",
+  "phone": "Phone number if visible",
   "dietary": "Standard / No Restrictions or noted dietary requirements",
-  "medicalNotes": "None or noted medical details"
+  "medicalNotes": "None or noted medical details",
+  "insurancePolicyNumber": "Insurance policy number if visible",
+  "emergencyName": "Emergency contact name if visible",
+  "emergencyRelation": "Emergency contact relation",
+  "emergencyPhone": "Emergency contact phone",
+  "detectedDocumentType": "Biometric Passport Scan / Travel PDF",
+  "confidenceScore": 98
 }`;
 
+  const ai = getGenAi();
+  if (ai) {
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.7-flash",
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: effectiveMime,
+                  data: cleanBase64,
+                },
+              },
+              { text: prompt },
+            ],
+          },
+        ],
+      });
+      const text = response.text;
+      if (text) {
+        const cleanText = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
+        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed && parsed.fullName) return parsed;
+        }
+      }
+    } catch (err) {
+      console.warn("GoogleGenAI OCR execution warning:", err);
+    }
+  }
+
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
       {
@@ -498,7 +567,7 @@ Extract the passport fields and return ONLY a valid JSON object with no markdown
               parts: [
                 {
                   inlineData: {
-                    mimeType: mimeType?.includes("pdf") ? "application/pdf" : mimeType || "image/jpeg",
+                    mimeType: effectiveMime,
                     data: cleanBase64,
                   },
                 },
@@ -513,8 +582,10 @@ Extract the passport fields and return ONLY a valid JSON object with no markdown
     const json: any = await res.json();
     const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) return null;
-    const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleanText);
+    const cleanText = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    return null;
   } catch (err) {
     console.error("Gemini Passport OCR error:", err);
     return null;
@@ -1405,7 +1476,7 @@ Return one line per day in the form "Day N | Title | Location | Description".`;
       });
     }
 
-    if (kind === "ocr-passport") {
+    if (kind === "ocr-passport" || kind === "scan-passport") {
       const { imageBase64, mimeType, filename, memberRelation } = b;
       let ocrResult: any = null;
       if (imageBase64) {
@@ -1417,68 +1488,7 @@ Return one line per day in the form "Day N | Title | Location | Description".`;
       }
 
       if (!ocrResult || !ocrResult.fullName) {
-        const sampleSeed = (filename || "").toLowerCase();
-        if (sampleSeed.includes("spouse") || sampleSeed.includes("charlotte") || memberRelation === "Spouse") {
-          ocrResult = {
-            fullName: "Charlotte Montgomery",
-            passportNumber: "US98124509",
-            passportExpiry: "2031-06-18",
-            nationality: "United States",
-            dob: "1988-03-24",
-            gender: "Female",
-            occupation: "Architect & Landscape Designer",
-            dietary: "Vegetarian",
-            medicalNotes: "No known allergies",
-          };
-        } else if (sampleSeed.includes("child") || sampleSeed.includes("son") || sampleSeed.includes("daughter") || memberRelation === "Child") {
-          ocrResult = {
-            fullName: "Liam Montgomery",
-            passportNumber: "US88231094",
-            passportExpiry: "2030-09-12",
-            nationality: "United States",
-            dob: "2016-11-04",
-            gender: "Male",
-            occupation: "Student",
-            dietary: "Standard / No Restrictions",
-            medicalNotes: "Mild seasonal pollen allergy",
-          };
-        } else if (sampleSeed.includes("french") || sampleSeed.includes("diver") || sampleSeed.includes("lucas")) {
-          ocrResult = {
-            fullName: "Lucas Laurent",
-            passportNumber: "FRA8923410",
-            passportExpiry: "2032-04-10",
-            nationality: "French",
-            dob: "1984-07-19",
-            gender: "Male",
-            occupation: "Marine Biologist & Dive Master",
-            dietary: "Pescatarian / Halal",
-            medicalNotes: "None",
-          };
-        } else if (sampleSeed.includes("german") || sampleSeed.includes("clara")) {
-          ocrResult = {
-            fullName: "Dr. Clara Schneider",
-            passportNumber: "C14980231",
-            passportExpiry: "2033-01-15",
-            nationality: "German",
-            dob: "1982-12-03",
-            gender: "Female",
-            occupation: "Geological Surveyor & Cartographer",
-            dietary: "Vegan / Gluten-Free",
-            medicalNotes: "None",
-          };
-        } else {
-          ocrResult = {
-            fullName: "Dr. Arthur Pendelton",
-            passportNumber: "GB98234112",
-            passportExpiry: "2029-11-20",
-            nationality: "British",
-            dob: "1978-08-14",
-            gender: "Male",
-            occupation: "Professor of Horn of Africa Archeology",
-            dietary: "Standard / No Restrictions",
-            medicalNotes: "None",
-          };
-        }
+        return ok({ success: false, error: "Unable to extract passport information. Please ensure the document is clear and readable." });
       }
 
       return ok({ success: true, ...ocrResult });

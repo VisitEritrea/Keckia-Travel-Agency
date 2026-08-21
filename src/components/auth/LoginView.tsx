@@ -19,17 +19,9 @@ interface LoginViewProps {
   onSignedIn: (user: WorkspaceUser) => void;
 }
 
-const DEMO_ROLES = [
-  { label: 'CEO / Admin', username: 'admin', pass: 'Admin@2026!', badge: 'Full Control' },
-  { label: 'Operations', username: 'operations', pass: 'Operations@2026!', badge: 'Tours & Fleet' },
-  { label: 'Finance', username: 'finance', pass: 'Finance@2026!', badge: 'Ledger & Payments' },
-  { label: 'Tour Desk', username: 'tourops', pass: 'TourOps@2026!', badge: 'Schedules & Guides' },
-  { label: 'Sales Agent', username: 'agent1', pass: 'Agent1@2026!', badge: 'Bookings' },
-];
-
 export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('Admin@2026!');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,7 +29,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
 
   // Reset Password Modal State
   const [showResetModal, setShowResetModal] = useState(false);
-  const [resetUsername, setResetUsername] = useState('admin');
+  const [resetUsername, setResetUsername] = useState('');
   const [resetNewPassword, setResetNewPassword] = useState('');
   const [resetConfirmPassword, setResetConfirmPassword] = useState('');
   const [resetError, setResetError] = useState<string | null>(null);
@@ -62,7 +54,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
     setError(null);
     try {
       const res = await api.post<{ user: WorkspaceUser; token?: string }>('auth/login', {
-        username: userToSubmit,
+        username: userToSubmit.trim(),
         password: passToSubmit,
       });
       if (res.token) {
@@ -78,13 +70,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     await performLogin(username, password);
-  };
-
-  const selectDemoRole = (u: string, p: string) => {
-    setUsername(u);
-    setPassword(p);
-    setError(null);
-    performLogin(u, p);
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -184,34 +169,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
             Use your work username or email address. Your role decides which modules open.
           </p>
 
-          {/* Quick 1-click Role Selector */}
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-3.5">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-2">
-              <span className="flex items-center gap-1.5 text-slate-800">
-                <Users className="h-3.5 w-3.5 text-brand-600" /> Quick Sign-in as:
-              </span>
-              <span className="text-[11px] text-slate-500">1-click demo access</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {DEMO_ROLES.map((r) => (
-                <button
-                  key={r.username}
-                  type="button"
-                  onClick={() => selectDemoRole(r.username, r.pass)}
-                  disabled={busy}
-                  className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition text-left cursor-pointer ${
-                    username === r.username
-                      ? 'bg-brand-600 border-brand-600 text-white shadow-sm'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="font-semibold">{r.label}</span>
-                  <span className="text-[10px] opacity-75 ml-1">({r.username})</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {dbProblem && (
             <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
@@ -229,7 +186,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
             </div>
           )}
 
-          <form onSubmit={submit} className="mt-5 space-y-3.5">
+          <form onSubmit={submit} className="mt-6 space-y-4">
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Username or email
@@ -241,7 +198,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full min-h-11 rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/20"
-                  placeholder="admin"
+                  placeholder="Enter your username or email"
                   autoComplete="username"
                   required
                 />
@@ -254,7 +211,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    setResetUsername(username || 'admin');
+                    setResetUsername(username);
                     setResetError(null);
                     setShowResetModal(true);
                   }}
@@ -286,15 +243,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
                 <div className="flex items-center gap-2 pt-1 border-t border-rose-200">
                   <button
                     type="button"
-                    onClick={() => selectDemoRole('admin', 'Admin@2026!')}
-                    className="px-2.5 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-medium text-[11px] cursor-pointer shadow-xs transition"
-                  >
-                    1-Click Sign-in as CEO / Admin
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => {
-                      setResetUsername(username || 'admin');
+                      setResetUsername(username);
                       setResetError(null);
                       setShowResetModal(true);
                     }}
@@ -315,31 +265,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
               {busy ? 'Signing in…' : 'Sign in to Workspace'}
             </button>
           </form>
-
-          <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-600">
-            <div className="flex items-center justify-between font-semibold text-slate-700">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-brand-600" />
-                Default Credentials
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setResetUsername('admin');
-                  setResetError(null);
-                  setShowResetModal(true);
-                }}
-                className="text-[11px] font-semibold text-brand-600 hover:underline cursor-pointer"
-              >
-                Set Custom Password
-              </button>
-            </div>
-            <div className="mt-1.5 space-y-1 text-slate-600 font-mono text-[11px]">
-              <div>• CEO / Admin: <span className="font-semibold text-slate-800">admin</span> / <span className="font-semibold text-slate-800">Admin@2026!</span></div>
-              <div>• Operations: <span className="font-semibold text-slate-800">operations</span> / <span className="font-semibold text-slate-800">Operations@2026!</span></div>
-              <div>• Finance: <span className="font-semibold text-slate-800">finance</span> / <span className="font-semibold text-slate-800">Finance@2026!</span></div>
-            </div>
-          </div>
         </div>
       </div>
 

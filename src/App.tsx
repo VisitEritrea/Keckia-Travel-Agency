@@ -31,7 +31,10 @@ import {
   ReceiptVerificationStatus,
   TouristActivity,
   TourBooking,
+  PermitItineraryStop,
 } from './types';
+import { TouristExpedition } from './components/packages/AddTouristExpeditionModal';
+import { NEW_SAMPLE_EXPEDITION } from './components/packages/TourPackagesView';
 import { useCollection, useWorkspace } from './lib/workspace';
 import { api, setAuthToken } from './lib/api';
 import { ROLES, canView, canWrite, ADMIN_ONLY_EDIT_MESSAGE } from '../shared/roles';
@@ -106,6 +109,7 @@ export default function App() {
   const [notifications, setNotifications] = useCollection<NotificationItem>('notifications');
   const [touristActivities, setTouristActivities] = useCollection<TouristActivity>('touristActivities');
   const [tourBookings, setTourBookings] = useCollection<TourBooking>('tourBookings');
+  const [expeditions, setExpeditions] = useCollection<TouristExpedition>('expeditions');
   const [persistedClients, setPersistedClients] = useCollection<TicketingClient>('ticketingClients');
 
   const ticketingClients = useMemo(() => {
@@ -206,7 +210,419 @@ export default function App() {
     setNotifications((prev) => [alert, ...prev]);
   };
 
-  // Handlers for Vehicles & Transport
+  // Handlers for Tourist Expeditions (Tour Operations cross-module sync)
+  const handleSaveExpedition = (exp: TouristExpedition) => {
+    // 1. Save expedition record
+    setExpeditions((prev) => {
+      const idx = prev.findIndex((e) => e.id === exp.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = exp;
+        return copy;
+      }
+      return [exp, ...prev];
+    });
+
+    // 2. Propagate to Tourist Profiles (Lead + All Family Members)
+    const newProfiles: TouristProfile[] = [];
+    newProfiles.push({
+      id: `tourist-${exp.id}`,
+      fullName: exp.leadName,
+      email: exp.email || '',
+      phone: exp.phone || '',
+      passportNumber: exp.passportNumber || '',
+      passportExpiry: exp.passportExpiry || '',
+      nationality: exp.nationality || 'International',
+      dateOfBirth: exp.dateOfBirth || '',
+      gender: exp.gender || 'Male',
+      occupation: exp.occupation || 'International Traveler',
+      dietaryRequirements: exp.dietary || '',
+      medicalNotes: exp.medicalNotes || '',
+      medicalClearanceHighAltitude: exp.medicalClearanceHighAltitude,
+      emergencyContact: exp.emergencyContact || { name: '', relation: '', phone: '' },
+      travelHistoryCount: 1,
+      status: exp.isVip ? 'VIP' : 'Active Traveler',
+      avatar: exp.avatar || '',
+      notes: `Expedition Dossier: ${exp.partyTitle || exp.routeSummary}`,
+      preferredLanguage: exp.preferredLanguage || 'English',
+      scannedDocumentName: exp.passportDocName,
+      scannedDocumentUrl: exp.passportDocUrl,
+      tourSituation: exp.situation,
+      groupOrFamilyName: exp.partyTitle,
+      partySize: exp.paxCount,
+      companions: exp.companions || exp.familyMembers || [],
+      customItinerary: {
+        summary: exp.routeSummary,
+        days: exp.schedule,
+      },
+      hotelBookings: exp.hotelBookings,
+      assignedGuideId: exp.assignedGuideId || exp.guideId,
+      assignedDriverId: exp.assignedDriverId || exp.driverId,
+      assignedVehicleId: exp.assignedVehicleId || exp.vehicleId,
+    });
+
+    const companionList = exp.companions || exp.familyMembers || [];
+    if (companionList.length > 0) {
+      companionList.forEach((m, mIdx) => {
+        newProfiles.push({
+          id: `tourist-${exp.id}-m${mIdx + 1}`,
+          fullName: m.fullName || (m as any).name || 'Companion Traveler',
+          email: exp.email || '',
+          phone: exp.phone || '',
+          passportNumber: m.passportNumber || '',
+          passportExpiry: m.passportExpiry || '',
+          nationality: m.nationality || exp.nationality || 'International',
+          dateOfBirth: m.dateOfBirth || (m as any).dob || '',
+          gender: m.gender === 'Female' ? 'Female' : 'Male',
+          occupation: m.occupation || m.relationship || 'Travel Companion',
+          dietaryRequirements: m.dietaryRequirements || (m as any).dietary || exp.dietary || '',
+          medicalNotes: m.medicalNotes || '',
+          emergencyContact: exp.emergencyContact || { name: '', relation: '', phone: '' },
+          travelHistoryCount: 1,
+          status: 'Active Traveler',
+          avatar: '',
+          notes: `Travel Companion with ${exp.leadName} (${m.relationship || 'Family'})`,
+          preferredLanguage: 'English',
+          scannedDocumentName: m.passportDocName,
+          scannedDocumentUrl: m.passportDocUrl,
+          tourSituation: exp.situation,
+        });
+      });
+    }
+
+    setTourists((prev) => {
+      let updated = [...prev];
+      for (const p of newProfiles) {
+        const existIdx = updated.findIndex(
+          (t) =>
+            (t.passportNumber && t.passportNumber === p.passportNumber) ||
+            t.id === p.id ||
+            t.fullName.toLowerCase() === p.fullName.toLowerCase()
+        );
+        if (existIdx >= 0) {
+          updated[existIdx] = { ...updated[existIdx], ...p };
+        } else {
+          updated = [p, ...updated];
+        }
+      }
+      return updated;
+    });
+
+    // 3. Propagate to Hotel Reservation & Management Letter
+    const hotelName = exp.hotelName || exp.schedule?.[0]?.lodging || 'Hotel Asmara Palace';
+    const hotelObj = hotels.find((h) => h.name.toLowerCase().includes(hotelName.toLowerCase())) || hotels[0];
+    const checkIn = exp.checkIn || new Date().toISOString().split('T')[0];
+    const checkOut =
+      exp.checkOut ||
+      new Date(Date.now() + (exp.daysPlanned || 5) * 86400000).toISOString().split('T')[0];
+
+    const hotelRes: HotelReservation = {
+      id: `res-exp-${exp.id}`,
+      confirmationCode: `CONF-${exp.id.slice(-4).toUpperCase()}`,
+      hotelId: hotelObj?.id || 'hotel-001',
+      hotelName: hotelObj?.name || hotelName,
+      hotelCity: hotelObj?.city || 'Asmara',
+      roomTypeId: hotelObj?.roomTypes?.[0]?.id || 'rt-001',
+      roomTypeName: exp.roomType || hotelObj?.roomTypes?.[0]?.name || 'Deluxe Room',
+      touristId: `tourist-${exp.id}`,
+      touristName: exp.leadName,
+      touristPassport: exp.passportNumber,
+      touristNationality: exp.nationality,
+      touristEmail: exp.email,
+      touristPhone: exp.phone,
+      tourPackageTitle: exp.partyTitle || exp.routeSummary,
+      checkInDate: checkIn,
+      checkOutDate: checkOut,
+      numberOfNights: exp.daysPlanned || 4,
+      numberOfGuests: exp.paxCount || 1,
+      numberOfRooms: Math.ceil((exp.paxCount || 1) / 2),
+      mealPlan: 'Bed & Breakfast (BB)',
+      pricePerNight: 120,
+      totalAmount: exp.totalHotelUSD || 480,
+      paymentStatus: 'Confirmed',
+      specialRequests: exp.dietary ? `Dietary: ${exp.dietary}` : undefined,
+      voucherIssuedAt: new Date().toISOString().split('T')[0],
+      airportTransferIncluded: true,
+    };
+
+    setReservations((prev) => {
+      const idx = prev.findIndex((r) => r.id === hotelRes.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = hotelRes;
+        return copy;
+      }
+      return [hotelRes, ...prev];
+    });
+
+    const hotelLetterDoc: HotelLetterDoc = {
+      id: `hl-exp-${exp.id}`,
+      refNumber: `REF-HTL-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      date: new Date().toISOString().split('T')[0],
+      hotelId: hotelObj?.id || 'hotel-001',
+      hotelName: hotelObj?.name || hotelName,
+      hotelNameTigrinya: hotelObj?.nameTigrinya || hotelName,
+      city: hotelObj?.city || 'ኣስመራ (Asmara)',
+      subjectTigrinya: 'ጉዳይ፥ ሕድሪ ቦታ ምሓዝ (Hotel Room Reservation Request)',
+      salutationTigrinya: 'ዝኸበርኩም ኣካየድቲ ሆቴል፡',
+      openingTigrinya: 'ብትካልና ኬክያ ወኪል ጉዕዞ ንዝመጹና ኣጋይሽ/ቱሪስት ኣብ ሆቴልኩም መደቀሲ ክፍሊ ክትሕዙልና ብትሕትና ንሓትት።',
+      closingTigrinya: 'ንትገብሩልና ምትሕብባር ኣቐዲምና ነመስግን።',
+      signoffTigrinya: 'ብኣኽብሮት፡',
+      agencyNameTigrinya: 'ኬክያ ወኪል ጉዕዞ (Keckia Travel Agency)',
+      guests: [
+        {
+          id: `guest-${exp.id}-1`,
+          name: exp.leadName,
+          noOfClients: 1,
+          roomType: exp.roomType || 'Deluxe Single',
+          reservedDate: checkIn,
+          nights: exp.daysPlanned || 4,
+          remarks: `Passport: ${exp.passportNumber} (${exp.nationality})`,
+        },
+        ...(exp.companions || exp.familyMembers || []).map((m, mIdx) => ({
+          id: `guest-${exp.id}-${mIdx + 2}`,
+          name: m.fullName || (m as any).name || 'Companion',
+          noOfClients: 1,
+          roomType: 'Standard Room',
+          reservedDate: checkIn,
+          nights: exp.daysPlanned || 4,
+          remarks: `Passport: ${m.passportNumber} (${m.nationality || exp.nationality})`,
+        })),
+      ],
+      status: 'Confirmed by Hotel',
+    };
+
+    setHotelLetters((prev) => {
+      const idx = prev.findIndex((hl) => hl.id === hotelLetterDoc.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = hotelLetterDoc;
+        return copy;
+      }
+      return [hotelLetterDoc, ...prev];
+    });
+
+    // 4. Propagate to Visa on Arrival (VoA) Guarantee Letter
+    const voaDoc: VisaOnArrivalDoc = {
+      id: `voa-exp-${exp.id}`,
+      docNumber: `VE-VOA-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      referenceNumber: `REF-VOA-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      touristId: `tourist-${exp.id}`,
+      touristName: exp.leadName,
+      passportNumber: exp.passportNumber,
+      passportExpiry: exp.passportExpiry,
+      gender: 'Male',
+      nationality: exp.nationality,
+      occupation: exp.occupation || 'International Traveler',
+      job: exp.occupation || 'International Traveler',
+      tourPackageTitle: exp.partyTitle || exp.routeSummary,
+      arrivalDate: checkIn,
+      departureDate: checkOut,
+      entryPort: 'Asmara International Airport (ASM)',
+      localSponsorName: 'EritreaVisit Tours & Travel / Keckia Travel Agency',
+      localSponsorLicense: 'LIC/TOUR/MOCT-88921-ET',
+      hotelArrangements: hotelName,
+      issuanceStatus: 'Approved',
+      generatedAt: new Date().toISOString().split('T')[0],
+      letterDate: new Date().toISOString().split('T')[0],
+      officialNotes: `Official Consular Visa on Arrival Guarantee issued for ${exp.leadName} (${exp.paxCount} travelers).`,
+      signatoryName: 'Helen Berhe',
+      signatoryTitle: 'Head of Consular & Compliance Affairs',
+      touristsManifest: [
+        {
+          name: exp.leadName,
+          passportNo: exp.passportNumber,
+          gender: 'Male',
+          nationality: exp.nationality,
+          job: exp.occupation || 'International Traveler',
+        },
+        ...(exp.companions || exp.familyMembers || []).map((m) => ({
+          name: m.fullName || (m as any).name || 'Companion',
+          passportNo: m.passportNumber,
+          gender: m.gender || 'Male',
+          nationality: m.nationality || exp.nationality,
+          job: m.occupation || m.relationship || (m as any).relation || 'Traveler',
+        })),
+      ],
+    };
+
+    setVisaDocs((prev) => {
+      const idx = prev.findIndex((v) => v.id === voaDoc.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = voaDoc;
+        return copy;
+      }
+      return [voaDoc, ...prev];
+    });
+
+    // 5. Propagate to Regional Travel Permit
+    const permitStopsList: PermitItineraryStop[] = (exp.schedule || []).map((day, idx) => ({
+      id: `stop-${exp.id}-${idx + 1}`,
+      place: day.location || 'Asmara & Regional Sites',
+      tourDate: `${checkIn} - Day ${day.dayNumber}`,
+      hotel: day.lodging || hotelName,
+    }));
+
+    const allExpCompanions = exp.companions || exp.familyMembers || [];
+
+    const permitDoc: RegionalPermitDoc = {
+      id: `pmt-exp-${exp.id}`,
+      permitNumber: `PERMIT-MOT-2026-${Math.floor(100 + Math.random() * 900)}`,
+      referenceNumber: `REF-MOT-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      zoneName: exp.routeSummary || 'Asmara → Massawa → Qohaito',
+      zoneType: 'Heritage Park',
+      tourScheduleId: `sch-${exp.id}`,
+      tourPackageTitle: exp.partyTitle || exp.routeSummary,
+      leadGuideName: exp.guideName || 'Dawit Haile',
+      leadGuidePhone: exp.guidePhone || '+291 7 112233',
+      leadGuideId: 'MOT-GD-0012',
+      guideLicenseNo: 'MOT-GD-0012',
+      touristNames: [exp.leadName, ...allExpCompanions.map((m) => m.fullName || (m as any).name)],
+      touristPassports: [exp.passportNumber, ...allExpCompanions.map((m) => m.passportNumber)],
+      validFrom: checkIn,
+      validTo: checkOut,
+      vehiclePlate: exp.vehiclePlate || 'ER-2-04981',
+      vehicleType: exp.vehicleName || exp.vehicleType || 'Toyota Land Cruiser 4WD',
+      hotelName: hotelName,
+      authorityOffice: 'ሚኒስትሪ ቱሪዝም ማእከል ሓበሬታ (Ministry of Tourism Information Center)',
+      status: 'Active',
+      specialClearanceCode: `CLR-${Date.now().toString().slice(-6)}`,
+      emergencyRadioFreq: '146.520 MHz (VHF Ch. 4)',
+      issuedAt: new Date().toISOString().split('T')[0],
+      letterDate: new Date().toISOString().split('T')[0],
+      touristsManifest: [
+        {
+          number: 1,
+          name: exp.leadName,
+          nationality: exp.nationality,
+          passportNumber: exp.passportNumber,
+          sex: 'Male',
+          tourDate: `${checkIn} - ${checkOut}`,
+          tourPlace: exp.routeSummary || 'Asmara & Regional Sites',
+          hotel: hotelName,
+        },
+        ...allExpCompanions.map((m, idx) => ({
+          number: idx + 2,
+          name: m.fullName || (m as any).name || 'Companion',
+          nationality: m.nationality || exp.nationality,
+          passportNumber: m.passportNumber,
+          sex: m.gender || 'Male',
+          tourDate: `${checkIn} - ${checkOut}`,
+          tourPlace: exp.routeSummary || 'Asmara & Regional Sites',
+          hotel: hotelName,
+        })),
+      ],
+      driversManifest: [
+        {
+          driverName: exp.driverName || 'Yemane Beraki',
+          phoneNumber: exp.driverPhone || '+291 7 556677',
+          phone: exp.driverPhone || '+291 7 556677',
+          licenseNumber: 'TS-44012',
+          taseraNo: 'TS-44012',
+          vehicleType: exp.vehicleName || 'Toyota Land Cruiser 4WD',
+          carType: exp.vehicleName || 'Toyota Land Cruiser 4WD',
+          plateNumber: exp.vehiclePlate || 'ER-2-04981',
+          carPlate: exp.vehiclePlate || 'ER-2-04981',
+        },
+      ],
+      itineraryStops: permitStopsList.length > 0 ? permitStopsList : undefined,
+    };
+
+    setPermits((prev) => {
+      const idx = prev.findIndex((p) => p.id === permitDoc.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = permitDoc;
+        return copy;
+      }
+      return [permitDoc, ...prev];
+    });
+
+    // 6. Propagate to Tour Schedules
+    const tourSch: TourSchedule = {
+      id: `sch-${exp.id}`,
+      tourPackageId: 'pkg-custom',
+      tourTitle: exp.partyTitle || exp.routeSummary,
+      destination: exp.routeSummary || 'Asmara - Massawa - Qohaito',
+      startDate: checkIn,
+      endDate: checkOut,
+      status: 'Upcoming',
+      leadGuideId: 'emp-001',
+      leadGuideName: exp.guideName || 'Dawit Haile',
+      supportStaffIds: [],
+      supportStaffNames: [exp.driverName || 'Yemane Beraki'],
+      totalSeats: exp.paxCount || 1,
+      bookedSeats: exp.paxCount || 1,
+      ticketClasses: {
+        vip: { price: 1200, totalSeats: exp.paxCount || 1, bookedSeats: exp.paxCount || 1 },
+        standard: { price: 800, totalSeats: 0, bookedSeats: 0 },
+        group: { price: 650, totalSeats: 0, bookedSeats: 0 },
+      },
+      permitReference: permitDoc.permitNumber,
+      notes: `Convoy & Expedition for ${exp.leadName}. Route: ${exp.routeSummary}`,
+    };
+
+    setSchedules((prev) => {
+      const idx = prev.findIndex((s) => s.id === tourSch.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = tourSch;
+        return copy;
+      }
+      return [tourSch, ...prev];
+    });
+
+    // 7. Propagate to Tour Booking
+    const tourBk: TourBooking = {
+      id: `tb-exp-${exp.id}`,
+      touristId: `tourist-${exp.id}`,
+      touristName: exp.leadName,
+      region: 'Central & Red Sea',
+      startDate: checkIn,
+      endDate: checkOut,
+      hotelName: hotelName,
+      guideName: exp.guideName || 'Dawit Haile',
+      driverName: exp.driverName || 'Yemane Beraki',
+      vehicleName: exp.vehicleName || 'Toyota Land Cruiser 4WD',
+      guideAllowanceUSD: 250,
+      driverAllowanceUSD: 180,
+      mealsUSD: 200,
+      entranceFeesUSD: 120,
+      tourType: exp.situation === 'Single' ? 'Private Tour' : 'Custom Tour',
+      travelersCount: exp.paxCount || 1,
+      pricePerPersonUSD: 950,
+      totalPackageUSD: (exp.totalHotelUSD || 480) + 1200,
+      status: 'Confirmed',
+      createdAt: new Date().toISOString(),
+    };
+
+    setTourBookings((prev) => {
+      const idx = prev.findIndex((tb) => tb.id === tourBk.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = tourBk;
+        return copy;
+      }
+      return [tourBk, ...prev];
+    });
+
+    // Notification alert
+    const alert: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: `Expedition Registered & Synced: ${exp.leadName}`,
+      message: `Tourist dossier created, hotel reserved at ${hotelName}, VoA sponsorship drafted, and Ministry of Tourism permit generated.`,
+      timestamp: 'Just now',
+      read: false,
+      priority: 'normal',
+      type: 'permit_issued',
+    };
+    setNotifications((prev) => [alert, ...prev]);
+  };
+
+  const handleDeleteExpedition = (id: string) => {
+    setExpeditions((prev) => prev.filter((e) => e.id !== id));
+  };
   const handleAddVehicle = (newVeh: Vehicle) => {
     setVehicles((prev) => [newVeh, ...prev]);
     const alert: NotificationItem = {
@@ -880,7 +1296,10 @@ export default function App() {
               employees={employees}
               vehicles={vehicles}
               tourBookings={tourBookings}
+              expeditions={expeditions}
               canEdit={canEditRecords}
+              onSaveExpedition={handleSaveExpedition}
+              onDeleteExpedition={handleDeleteExpedition}
               onAddPackage={handleAddPackage}
               onUpdatePackage={handleUpdatePackage}
               onSaveItinerary={handleSavePackageItinerary}

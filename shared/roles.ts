@@ -169,6 +169,7 @@ export const COLLECTION_MODULE: Record<string, ModuleKey> = {
   packages: "packages",
   activities: "packages",
   tourBookings: "packages",
+  expeditions: "packages",
   schedules: "tours",
   itineraries: "tours",
   tourists: "tourists",

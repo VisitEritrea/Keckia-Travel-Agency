@@ -305,9 +305,28 @@ export const PermitDocumentPreview: React.FC<PermitDocumentPreviewProps> = ({
           <div className="flex items-baseline flex-wrap gap-1.5">
             <span className="font-bold">ተሓዚእሎም ዘሎ ሆቴል ፡</span>
             <span className="font-semibold border-b border-slate-900 flex-1 min-w-[220px] px-2 font-sans text-slate-900">
-              {permit.hotelName || '(Fill the Hotel they will stay)'}
+              {permit.hotelName ||
+                (permit.itineraryStops && permit.itineraryStops.length > 0
+                  ? permit.itineraryStops.map((s) => `${s.place}: ${s.hotel || 'Hotel'}`).join(' · ')
+                  : '(Fill the Hotel they will stay)')}
             </span>
           </div>
+
+          {/* If multi-leg stops with distinct hotels are defined, show detailed breakdown */}
+          {permit.itineraryStops && permit.itineraryStops.length > 1 && (
+            <div className="pl-4 py-1 text-[11px] font-sans border-l-2 border-slate-300 space-y-0.5 text-slate-700">
+              <span className="font-bold text-slate-900 font-serif block">ዕረፍቲ ሆቴላትን ቦታታትን / Destinations & Lodging:</span>
+              {permit.itineraryStops.map((s, idx) => (
+                <div key={s.id || idx} className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900 font-mono">Leg #{idx + 1}:</span>
+                  <span className="font-semibold text-slate-800">{s.place}</span>
+                  <span className="text-slate-500 font-mono">({formatToDMY(s.tourDate)})</span>
+                  <span className="text-slate-400">→</span>
+                  <span className="font-bold text-emerald-800">ተሓዚእሎም ዘሎ ሆቴል፡ {s.hotel}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Agency */}
           <div className="flex items-baseline gap-2">

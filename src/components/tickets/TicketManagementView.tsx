@@ -596,19 +596,27 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
                           </div>
                         </td>
 
-                        {/* Schedule Dates */}
+                        {/* Schedule Dates & Flight Times */}
                         <td className="py-4 px-4 font-mono text-[11px]">
-                          <div className="text-slate-800 font-semibold">
-                            Dep: {t.departureDate}
+                          <div className="text-slate-900 font-bold flex items-center gap-1">
+                            <span>Dep: {t.departureDate}</span>
+                            {t.departureTime && <span className="text-blue-700">({t.departureTime})</span>}
                           </div>
+                          {t.arrivalTime && (
+                            <div className="text-slate-600 text-[10px]">
+                              Arr: {t.arrivalTime}
+                            </div>
+                          )}
                           {t.returnDate && (
                             <div className="text-slate-500 text-[10px]">
                               Ret: {t.returnDate}
                             </div>
                           )}
-                          <div className="text-slate-400 text-[9px] mt-0.5">
-                            Booked: {t.bookingDate || t.issueDate}
-                          </div>
+                          {t.flightNumber && (
+                            <div className="text-purple-700 font-semibold text-[9px] mt-0.5">
+                              Flight: {t.flightNumber}
+                            </div>
+                          )}
                         </td>
 
                         {/* Financials (USD) */}
@@ -866,41 +874,57 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
 
                   {/* Card Middle: Dates & Financials */}
                   <div className="p-5 space-y-3.5 flex-1">
-                    {/* Dates 4-grid */}
+                    {/* Dates & Flight Times 4-grid */}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                         <span className="text-[9px] font-mono uppercase text-slate-400 block">
-                          Departure Date
+                          Departure
                         </span>
-                        <span className="font-bold text-slate-800 font-mono text-[11px]">
+                        <span className="font-bold text-slate-800 font-mono text-[11px] block">
                           {t.departureDate}
                         </span>
+                        {t.departureTime && (
+                          <span className="text-[10px] text-blue-700 font-mono font-semibold">
+                            Time: {t.departureTime}
+                          </span>
+                        )}
                       </div>
 
                       <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                         <span className="text-[9px] font-mono uppercase text-slate-400 block">
-                          Return Date
+                          Arrival / Return
                         </span>
-                        <span className="font-bold text-slate-800 font-mono text-[11px]">
-                          {t.returnDate || 'N/A'}
+                        <span className="font-bold text-slate-800 font-mono text-[11px] block">
+                          {t.returnDate || 'Same-day'}
+                        </span>
+                        {t.arrivalTime && (
+                          <span className="text-[10px] text-emerald-700 font-mono font-semibold">
+                            Arr: {t.arrivalTime}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
+                        <span className="text-[9px] font-mono uppercase text-slate-400 block">
+                          Flight No & Class
+                        </span>
+                        <span className="font-mono text-purple-700 font-bold text-[11px] block">
+                          {t.flightNumber || 'Scheduled'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {t.ticketClass || 'Standard'}
                         </span>
                       </div>
 
                       <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
                         <span className="text-[9px] font-mono uppercase text-slate-400 block">
-                          Booking Date
+                          Payment Status
                         </span>
-                        <span className="font-mono text-slate-600 text-[11px]">
-                          {t.bookingDate || t.issueDate}
+                        <span className="font-mono text-slate-800 font-bold text-[11px] block">
+                          {t.paymentStatus || 'Pending'}
                         </span>
-                      </div>
-
-                      <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
-                        <span className="text-[9px] font-mono uppercase text-slate-400 block">
-                          Payment Date
-                        </span>
-                        <span className="font-mono text-slate-600 text-[11px]">
-                          {t.paymentDate || t.bookingDate || 'Paid'}
+                        <span className="text-[10px] text-emerald-700 font-mono font-semibold">
+                          ${(t.amountPaid || 0).toLocaleString()} Paid
                         </span>
                       </div>
                     </div>

@@ -344,9 +344,39 @@ export interface WebsiteEnquiry {
   handledAt?: string | null;
 }
 
+export type TourSituation = 'Single' | 'Couple' | 'Family' | 'Group' | 'Delegation';
+
+export interface CompanionMember {
+  id: string;
+  fullName: string;
+  passportNumber: string;
+  passportExpiry: string;
+  nationality: string;
+  dateOfBirth: string;
+  gender: 'Male' | 'Female' | 'Other' | 'Prefer not to say';
+  relationship: string; // 'Spouse', 'Child', 'Colleague', 'Delegate'
+  occupation?: string;
+  dietaryRequirements?: string;
+  medicalNotes?: string;
+  passportDocName?: string;
+  passportDocUrl?: string;
+  passportVerified?: boolean;
+}
+
+export interface TouristItineraryDay {
+  dayNumber: number;
+  title: string;
+  location: string;
+  activities: string;
+  lodging?: string;
+  mealPlan?: 'Breakfast' | 'Half Board' | 'Full Board' | 'Dinner' | 'None';
+  transport?: string;
+}
+
 export interface TouristEmergencyContact {
   name: string;
-  relation: string;
+  relation?: string;
+  relationship?: string;
   phone: string;
 }
 
@@ -360,18 +390,58 @@ export interface TouristProfile {
   nationality: string;
   dateOfBirth: string;
   gender: 'Male' | 'Female' | 'Other' | 'Prefer not to say';
-  occupation?: string;
-  dietaryRequirements: string;
-  medicalNotes: string;
-  insurancePolicyNumber?: string;
-  emergencyContact: TouristEmergencyContact;
-  travelHistoryCount: number;
   status: 'Active Traveler' | 'Inquiry' | 'VIP' | 'Flagged';
   avatar: string;
-  notes: string;
-  preferredLanguage: string;
+  occupation?: string;
+  dietaryRequirements?: string;
+  medicalNotes?: string;
+  medicalClearanceHighAltitude?: boolean;
+  preferredLanguage?: string;
+  insurancePolicyNumber?: string;
+  emergencyContact?: TouristEmergencyContact;
+  travelHistoryCount?: number;
+  notes?: string;
   scannedDocumentUrl?: string;
   scannedDocumentName?: string;
+  tourSituation?: TourSituation;
+  groupOrFamilyName?: string;
+  partySize?: number;
+  companions?: CompanionMember[];
+  customItinerary?: {
+    summary: string;
+    days: TouristItineraryDay[];
+    notes?: string;
+  };
+  hotelBookings?: Array<{
+    hotelId: string;
+    hotelName: string;
+    roomType: string;
+    checkIn: string;
+    checkOut: string;
+    nights: number;
+    roomsCount: number;
+    totalUSD: number;
+    status: 'Confirmed' | 'Pending';
+  }>;
+  assignedGuideId?: string;
+  assignedGuideName?: string;
+  assignedGuidePhone?: string;
+  assignedDriverId?: string;
+  assignedDriverName?: string;
+  assignedDriverPhone?: string;
+  assignedVehicleId?: string;
+  assignedVehicleName?: string;
+  assignedVehiclePlate?: string;
+  companionNames?: string[];
+  itinerarySummary?: string;
+  itineraryDays?: TouristItineraryDay[];
+  itineraryNotes?: string;
+  reservedHotelId?: string;
+  reservedHotelName?: string;
+  reservedRoomType?: string;
+  reservedCheckIn?: string;
+  reservedCheckOut?: string;
+  phoneNumber?: string;
 }
 
 export type TicketClass = 'VIP' | 'Standard' | 'Group';
@@ -462,8 +532,35 @@ export interface Ticket {
 
   // New Ticket Booking fields
   airline?: string;
+  flightNumber?: string;
   route?: string;
   pnr?: string;
+  journeyType?: 'Round Trip' | 'One Way' | 'Stopover Transit' | 'Multi-City' | 'Stopover' | 'Multi City';
+  departureTime?: string;
+  arrivalTime?: string;
+  boardingTime?: string;
+  fromAirport?: string;
+  toAirport?: string;
+  terminal?: string;
+  gate?: string;
+  boardingGroup?: string;
+  cabinClass?: string;
+  frequentFlyerNo?: string;
+
+  // Extra / Return Leg (if Round Trip / Multi-city)
+  returnAirline?: string;
+  returnFlightNumber?: string;
+  returnFlightDate?: string;
+  returnDepartureTime?: string;
+  returnArrivalTime?: string;
+  returnBoardingTime?: string;
+  returnFrom?: string;
+  returnTo?: string;
+  returnTerminal?: string;
+  returnGate?: string;
+  returnBoardingGroup?: string;
+  returnSeat?: string;
+
   bookingDate?: string;
   paymentDate?: string;
   ticketCost?: number;
@@ -476,6 +573,11 @@ export interface Ticket {
   agent?: string;
   creditCardRef?: string;
   airportShuttle?: boolean;
+  airportShuttleTime?: string;
+  airportShuttlePickupLocation?: string;
+  airportShuttleVehicleId?: string;
+  airportShuttleDriverId?: string;
+  airportShuttleNotes?: string;
   preIssueChecklist?: {
     visaConfirmed: boolean;
     mileageCaptured: boolean;

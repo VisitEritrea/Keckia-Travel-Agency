@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Compass,
   Plus,
@@ -23,6 +23,7 @@ import {
   Trash2,
   Sparkles,
   FileText,
+  FileCheck,
   Printer,
   X,
   Star,
@@ -52,7 +53,10 @@ interface TourPackagesViewProps {
   hotels?: Hotel[];
   employees?: Employee[];
   vehicles?: Vehicle[];
+  expeditions?: TouristExpedition[];
   canEdit?: boolean;
+  onSaveExpedition?: (exp: TouristExpedition) => void;
+  onDeleteExpedition?: (id: string) => void;
   onAddPackage?: (pkg: TourPackage) => void;
   onUpdatePackage?: (pkg: TourPackage) => void;
   onDeletePackage?: (id: string) => void;
@@ -66,499 +70,115 @@ interface TourPackagesViewProps {
   onDeleteBooking?: (id: string) => void;
 }
 
-const INITIAL_EXPEDITIONS: TouristExpedition[] = [
-  // 1. Dr. Arthur Pendelton (Single Solo Archeological Expedition)
-  {
-    id: 'exp-001',
-    leadName: 'Dr. Arthur Pendelton',
-    situation: 'Single',
-    partyTitle: 'Dr. Arthur Pendelton — Archeological Field Survey',
-    paxCount: 1,
-    isVip: true,
-    nationality: 'British',
-    occupation: 'Professor of Horn of Africa Archeology',
-    passportNumber: 'GB98234112',
-    passportExpiry: '2029-11-20',
-    email: 'arthur.pendelton@oxford.ac.uk',
-    phone: '+44 7700 900123',
-    dietary: 'Vegetarian / Organic Only',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    travelerStatus: 'Active Traveler',
-    emergencyContact: {
-      name: 'Almaz Abraham',
-      relation: 'Spouse',
-      phone: '+44 7700 900124',
-    },
-    familyMembers: [],
-    daysPlanned: 3,
-    routeSummary: 'Asmara → Dekemhare → Segheneyti → Qohaito Ancient Ruins → Metera Hawulti Stele → Adi Keyh',
-    schedule: [
-      {
-        dayNumber: 1,
-        title: 'Asmara to Segheneyti Ancient Sycamore & Qohaito Plateau',
-        location: 'Segheneyti & Qohaito Plateau (Debub)',
-        lodging: 'Adi Keyh Archaeological Mountain Lodge',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Toyota Land Cruiser V8 Prado 4WD',
-        activitiesNotes: 'Picnic beneath 300-year-old giant sycamore tree depicted on the 5 Nakfa banknote, ascent to 2,600m plateau.',
-      },
-      {
-        dayNumber: 2,
-        title: 'Ancient Axumite Ruins of Qohaito & 1,000m Golba Canyon Edge',
-        location: 'Qohaito Archaeological Reserve & Safira Dam',
-        lodging: 'Adi Keyh Archaeological Mountain Lodge',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Toyota Land Cruiser V8 Prado 4WD',
-        activitiesNotes: 'Field excavation surveys at King Saba Palace, pre-Axumite rock painting caves, and ancient Safira Inscriptions.',
-      },
-      {
-        dayNumber: 3,
-        title: 'Metera Hawulti 3rd-Century Obelisk & Return to Asmara',
-        location: 'Metera Stele & Senafe',
-        lodging: 'Hotel Asmara Palace',
-        mealPlan: 'Breakfast & Lunch',
-        transportMode: 'Toyota Land Cruiser V8 Prado 4WD',
-        activitiesNotes: 'Analyzing ancient Ge’ez epigraphic dedications on the 5-meter-high 3rd-century Metera Hawulti obelisk.',
-      },
-    ],
-    hotelIncluded: true,
-    hotelId: 'htl-005',
-    hotelName: 'Adi Keyh Archaeological Mountain Lodge',
-    roomType: 'Standard Single En-Suite',
-    checkIn: '2026-08-18',
-    checkOut: '2026-08-21',
-    roomsCount: 1,
-    pricePerNightUSD: 95,
-    totalHotelUSD: 285,
-    hotelStatus: 'Reserved',
-    voucherIssued: true,
-    guideId: 'emp-005',
-    guideName: 'Dr. Dawit Tekle',
-    guidePhone: '+291 7 567890',
-    guideLanguages: ['Tigrinya', 'English', 'Italian', 'Ge’ez', 'Arabic'],
-    driverId: 'emp-004',
-    driverName: 'Tesfaldet Habtu',
-    driverPhone: '+291 7 334455',
-    driverLicenseValid: true,
-    vehicleId: 'veh-001',
-    vehicleName: 'Toyota Land Cruiser V8 Prado 4WD #1',
-    vehiclePlate: 'ER-2-18492',
-    vehicleCap: 5,
-    vehicleType: '4WD SUV Convoy',
-    staffStatus: 'Assigned',
-    createdAt: '2026-08-15',
+export const NEW_SAMPLE_EXPEDITION: TouristExpedition = {
+  id: 'exp-ops-001',
+  leadName: 'Dr. Arthur Pendelton',
+  situation: 'Single',
+  partyTitle: 'Dr. Arthur Pendelton — Central Highlands & Red Sea Archaeology',
+  paxCount: 1,
+  isVip: true,
+  nationality: 'British',
+  occupation: 'Professor of Horn of Africa Archaeology',
+  passportNumber: 'GB98234112',
+  passportExpiry: '2029-11-20',
+  email: 'arthur.pendelton@oxford.ac.uk',
+  phone: '+44 7700 900123',
+  dietary: 'Vegetarian / Organic Only',
+  avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+  travelerStatus: 'Active Traveler',
+  emergencyContact: {
+    name: 'Almaz Abraham',
+    relation: 'Spouse',
+    phone: '+44 7700 900124',
   },
+  familyMembers: [],
+  daysPlanned: 4,
+  routeSummary: 'Asmara Modernist Architecture → Segheneyti → Qohaito Ruins → Massawa Old Port & Green Island',
+  schedule: [
+    {
+      dayNumber: 1,
+      title: 'UNESCO Asmara Architectural Survey & Historic Railways',
+      location: 'Asmara (Central / Maekel)',
+      lodging: 'Hotel Asmara Palace',
+      mealPlan: 'Breakfast',
+      transport: 'Toyota Land Cruiser V8 Prado (Plate: ER-2-18492)',
+      activities: 'Field inspection of Fiat Tagliero, Cinema Impero, and steam locomotive maintenance depot.',
+    },
+    {
+      dayNumber: 2,
+      title: 'Segheneyti Giant Sycamore & Pre-Aksumite Qohaito Plateau',
+      location: 'Segheneyti & Qohaito Plateau (Debub)',
+      lodging: 'Adi Keyh Archaeological Mountain Lodge',
+      mealPlan: 'Full Board',
+      transport: '4WD Expedition Convoy',
+      activities: 'Rock art surveying at Adi Alauti canyon, Temple of Mariam Wakiro, and Egyptian Tomb excavations.',
+    },
+    {
+      dayNumber: 3,
+      title: 'Metera Stele & Descent via Filfil Solomuna Cloud Forest',
+      location: 'Metera (Senafe) & Filfil Solomuna Escarpment',
+      lodging: 'Massawa Grand Dahlak Hotel',
+      mealPlan: 'Half Board',
+      transport: 'Toyota Land Cruiser V8 Prado',
+      activities: 'Highland flora birdwatching, lush rainforest descent, and evening arrival at the Red Sea port.',
+    },
+    {
+      dayNumber: 4,
+      title: 'Ottoman Old Town Massawa & Coral Reef Survey',
+      location: 'Massawa Harbor & Sheikh Said Island',
+      lodging: 'Massawa Grand Dahlak Hotel',
+      mealPlan: 'Full Board',
+      transport: 'Marine Speedboat Vessel & 4WD',
+      activities: 'Coral biodiversity monitoring and archival photography of Turkish-Ottoman coral-block palaces.',
+    },
+  ],
+  hotelIncluded: true,
+  hotelId: 'hotel-001',
+  hotelName: 'Hotel Asmara Palace',
+  roomType: 'Deluxe Suite with Balcony',
+  checkIn: '2026-08-25',
+  checkOut: '2026-08-29',
+  roomsCount: 1,
+  pricePerNightUSD: 160,
+  totalHotelUSD: 640,
+  hotelStatus: 'Reserved',
+  voucherIssued: true,
+  guideId: 'emp-001',
+  guideName: 'Yemane Berhe',
+  guidePhone: '+291 7 123456',
+  guideLanguages: ['Tigrinya', 'English', 'Italian'],
+  driverId: 'emp-004',
+  driverName: 'Habte Michael',
+  driverPhone: '+291 7 334455',
+  driverLicenseValid: true,
+  vehicleId: 'veh-001',
+  vehicleName: 'Toyota Land Cruiser V8 Prado 4WD #1',
+  vehiclePlate: 'ER-2-18492',
+  vehicleCap: 5,
+  vehicleType: '4WD SUV Convoy',
+  staffStatus: 'Assigned',
+  createdAt: '2026-08-21',
+};
 
-  // 2. Montgomery Family Expedition (Family Tour 2 Pax)
-  {
-    id: 'exp-002',
-    leadName: 'Marcus Montgomery',
-    situation: 'Family',
-    partyTitle: 'Montgomery Family Expedition',
-    paxCount: 2,
-    isVip: false,
-    nationality: 'United States',
-    occupation: 'International Travel Columnist',
-    passportNumber: 'US948201949',
-    passportExpiry: '2030-05-12',
-    email: 'marcus.montgomery@wanderlust.com',
-    phone: '+1 415 892 0019',
-    dietary: 'Standard / No Restrictions',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    travelerStatus: 'Active Traveler',
-    emergencyContact: {
-      name: 'Sarah Montgomery',
-      relation: 'Sister',
-      phone: '+1 415 892 0020',
-    },
-    familyMembers: [
-      {
-        id: 'fam-01',
-        name: 'Charlotte Montgomery',
-        relation: 'Spouse',
-        gender: 'Female',
-        passportNumber: 'US948201950',
-        passportExpiry: '2030-05-12',
-        nationality: 'United States',
-        dob: '1988-06-22',
-        dietary: 'Gluten Free',
-        medicalNotes: 'None',
-      },
-    ],
-    daysPlanned: 4,
-    routeSummary: 'Massawa Port → Green Island → Dissei Eco-Camp → Madote Sandbank Marine Safari',
-    schedule: [
-      {
-        dayNumber: 1,
-        title: 'Massawa Harbor Boarding & Green Island Coral Snorkeling',
-        location: 'Massawa North Port & Green Island',
-        lodging: 'Dahlak Grand Hotel Massawa',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Dahlak Sea Explorer Speedboat 34ft',
-        activitiesNotes: 'Boarding twin-250HP speed boat, marine reserve safety orientation, and coral reef snorkeling.',
-      },
-      {
-        dayNumber: 2,
-        title: 'Dissei Island Village & Eco-Camp Beach Barbecue',
-        location: 'Dissei Island',
-        lodging: 'Dissei Marine Eco-Camp Bungalows',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Dahlak Sea Explorer Speedboat 34ft',
-        activitiesNotes: 'Meeting traditional Afar village elders, turtle hatching beach walk, and fresh seafood barbecue.',
-      },
-      {
-        dayNumber: 3,
-        title: 'Madote Sandbank Marine Sanctuary Coral Gardens',
-        location: 'Madote Sandbank Reefs',
-        lodging: 'Dissei Marine Eco-Camp Bungalows',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Dahlak Sea Explorer Speedboat 34ft',
-        activitiesNotes: 'Diving with manta rays and vibrant coral gardens along the outer shelf.',
-      },
-      {
-        dayNumber: 4,
-        title: 'Return Cruise to Massawa & Ottoman Batse Old Town',
-        location: 'Massawa Old Town',
-        lodging: 'Hotel Asmara Palace',
-        mealPlan: 'Breakfast & Lunch',
-        transportMode: 'Toyota Land Cruiser 4WD Convoy',
-        activitiesNotes: 'Ottoman coral-stone arcade stroll and return ascent along the winding highway to Asmara.',
-      },
-    ],
-    hotelIncluded: true,
-    hotelId: 'htl-003',
-    hotelName: 'Dahlak Grand Hotel & Dissei Camp',
-    roomType: 'Executive Sea-View Family Suite',
-    checkIn: '2026-08-20',
-    checkOut: '2026-08-24',
-    roomsCount: 1,
-    pricePerNightUSD: 140,
-    totalHotelUSD: 560,
-    hotelStatus: 'Reserved',
-    voucherIssued: true,
-    guideId: 'emp-006',
-    guideName: 'Rahel Kidane',
-    guidePhone: '+291 7 678901',
-    guideLanguages: ['Tigrinya', 'English', 'Arabic'],
-    driverId: 'emp-004',
-    driverName: 'Captain Saleh Idris',
-    driverPhone: '+291 7 445566',
-    driverLicenseValid: true,
-    vehicleId: 'veh-010',
-    vehicleName: 'Dahlak Sea Explorer Twin 250HP Speedboat',
-    vehiclePlate: 'MSW-SEA-14',
-    vehicleCap: 12,
-    vehicleType: 'Marine Speedboat',
-    staffStatus: 'Assigned',
-    createdAt: '2026-08-14',
-  },
-
-  // 3. Geneva Alpine Club Delegation (Group Tour 6 Pax)
-  {
-    id: 'exp-003',
-    leadName: 'Hans Gruber',
-    situation: 'Group',
-    partyTitle: 'Geneva Alpine Club Delegation',
-    paxCount: 6,
-    isVip: true,
-    nationality: 'Swiss',
-    occupation: 'High Mountain Alpine Federation Director',
-    passportNumber: 'CH78219402',
-    passportExpiry: '2028-09-14',
-    email: 'hans.gruber@alpine-geneve.ch',
-    phone: '+41 22 739 1100',
-    dietary: 'High Protein / Energy Packed',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
-    travelerStatus: 'Active Traveler',
-    emergencyContact: {
-      name: 'Beatrice Gruber',
-      relation: 'Spouse',
-      phone: '+41 22 739 1101',
-    },
-    familyMembers: [
-      {
-        id: 'grp-01',
-        name: 'Dominique Vaneck',
-        relation: 'Delegate',
-        gender: 'Male',
-        passportNumber: 'CH78219403',
-        passportExpiry: '2028-09-14',
-        nationality: 'Swiss',
-        dob: '1980-04-12',
-        dietary: 'Standard',
-        medicalNotes: 'High Altitude Cleared',
-      },
-      {
-        id: 'grp-02',
-        name: 'Astrid Lindqvist',
-        relation: 'Delegate',
-        gender: 'Female',
-        passportNumber: 'SE99482110',
-        passportExpiry: '2029-03-01',
-        nationality: 'Swedish',
-        dob: '1984-11-09',
-        dietary: 'Vegetarian',
-        medicalNotes: 'None',
-      },
-    ],
-    daysPlanned: 5,
-    routeSummary: 'Asmara → Filfil Cloud Forest → Sabur Escarpment → Keren Valley → Emba Soira High Ridge',
-    schedule: [
-      {
-        dayNumber: 1,
-        title: 'Asmara Briefing & Gear Calibration',
-        location: 'Asmara Main Depot',
-        lodging: 'Hotel Asmara Palace',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Toyota Coaster VIP Deluxe Bus',
-        activitiesNotes: 'GPS navigation checks, satellite communicators sync, and acclimation jog.',
-      },
-      {
-        dayNumber: 2,
-        title: 'Descent through Filfil Tropical Cloud Forest to Sabur',
-        location: 'Filfil Evergreen Highlands',
-        lodging: 'Keren Sarina Hotel & Resort',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Toyota Land Cruiser 79 Series Heavy-Duty #2',
-        activitiesNotes: 'High altitude birding trek, misty cloud forest canopy inspection, and botanical photography.',
-      },
-      {
-        dayNumber: 3,
-        title: 'Keren Monday Camel Market & Historic WWII Battlefield Ridge',
-        location: 'Keren & Tigu Fort',
-        lodging: 'Keren Sarina Hotel & Resort',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Toyota Land Cruiser 79 Series Heavy-Duty #2',
-        activitiesNotes: 'Nomadic livestock auctions, sacred Mariam Dearit hollow baobab tree church, and ridge hike.',
-      },
-      {
-        dayNumber: 4,
-        title: 'Southern Highlands Alpine Ridge Trek toward Emba Soira',
-        location: 'Debub Mountain Ridge',
-        lodging: 'Senafe Highland Eco-Lodge',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Toyota Land Cruiser 79 Series Heavy-Duty #2',
-        activitiesNotes: 'Trekking rocky granite outcrops, alpine flora identification, and campsite summit view.',
-      },
-      {
-        dayNumber: 5,
-        title: 'Return to Asmara & Final UNESCO Architectural Tour',
-        location: 'Asmara Central',
-        lodging: 'Hotel Asmara Palace',
-        mealPlan: 'Breakfast & Farewell Dinner',
-        transportMode: 'Toyota Coaster VIP Deluxe Bus',
-        activitiesNotes: 'Diplomatic reception, official certificate of expedition completion, and Italian dining.',
-      },
-    ],
-    hotelIncluded: true,
-    hotelId: 'htl-001',
-    hotelName: 'Hotel Asmara Palace & Keren Sarina Resort',
-    roomType: 'Diplomatic Presidential Twin Suites (3 Rooms)',
-    checkIn: '2026-08-22',
-    checkOut: '2026-08-27',
-    roomsCount: 3,
-    pricePerNightUSD: 320,
-    totalHotelUSD: 4800,
-    hotelStatus: 'Reserved',
-    voucherIssued: true,
-    guideId: 'emp-002',
-    guideName: 'Senait Tesfay',
-    guidePhone: '+291 7 234567',
-    guideLanguages: ['Tigrinya', 'English', 'French', 'Italian'],
-    driverId: 'emp-001',
-    driverName: 'Bereket Abraham',
-    driverPhone: '+291 7 123456',
-    driverLicenseValid: true,
-    vehicleId: 'veh-002',
-    vehicleName: 'Toyota Land Cruiser 79 Series Heavy-Duty #2',
-    vehiclePlate: 'ER-2-20419',
-    vehicleCap: 5,
-    vehicleType: '4WD SUV Convoy',
-    staffStatus: 'Assigned',
-    createdAt: '2026-08-12',
-  },
-
-  // 4. Claire Laurent-Dupont (Single Solo Marine Photojournalist)
-  {
-    id: 'exp-004',
-    leadName: 'Claire Laurent-Dupont',
-    situation: 'Single',
-    partyTitle: 'Claire Laurent-Dupont — Red Sea Marine Documentary',
-    paxCount: 1,
-    isVip: true,
-    nationality: 'French',
-    occupation: 'National Geographic Documentary Photographer',
-    passportNumber: 'FR77665544',
-    passportExpiry: '2029-04-18',
-    email: 'c.laurent@paris-media.fr',
-    phone: '+33 6 12 34 56 78',
-    dietary: 'Pescatarian / Seafood',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-    travelerStatus: 'Active Traveler',
-    emergencyContact: {
-      name: 'Pierre Laurent',
-      relation: 'Father',
-      phone: '+33 6 12 34 56 00',
-    },
-    familyMembers: [],
-    daysPlanned: 4,
-    routeSummary: 'Massawa Harbor → Batse Island Old Town → Dahlak Marine Reserve → Assab Coast',
-    schedule: [
-      {
-        dayNumber: 1,
-        title: 'Arrival in Massawa & Ottoman Coral-Stone Architecture',
-        location: 'Batse Island Old Town',
-        lodging: 'Red Sea Hotel Massawa',
-        mealPlan: 'Dinner only',
-        transportMode: 'Toyota Land Cruiser Prado TXL 4WD',
-        activitiesNotes: 'Photographing mashrabiya carved wooden balconies and sunset over the dhow docks.',
-      },
-      {
-        dayNumber: 2,
-        title: 'Deep Sea Coral Wall Filming at Dahlak Kebir Channel',
-        location: 'Dahlak Kebir Archipelago',
-        lodging: 'Red Sea Hotel Massawa',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Dahlak Pearl Twin Speedboat',
-        activitiesNotes: 'Underwater macro photography of virgin brain coral formations and dugong sanctuary.',
-      },
-      {
-        dayNumber: 3,
-        title: 'Dissei Island Coral Reefs & Sand Spit Sunset',
-        location: 'Dissei Island Sanctuary',
-        lodging: 'Red Sea Hotel Massawa',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: 'Dahlak Pearl Twin Speedboat',
-        activitiesNotes: 'Drone cinematography of turquoise lagoons and flamingos in coastal mangroves.',
-      },
-      {
-        dayNumber: 4,
-        title: 'Return to Asmara via Mai Atal Mountain Pass',
-        location: 'Mai Atal & Asmara',
-        lodging: 'Hotel Asmara Palace',
-        mealPlan: 'Breakfast & Lunch',
-        transportMode: 'Toyota Land Cruiser Prado TXL 4WD',
-        activitiesNotes: 'Media export and high-speed data backup at operations HQ.',
-      },
-    ],
-    hotelIncluded: true,
-    hotelId: 'htl-004',
-    hotelName: 'Red Sea Hotel Massawa',
-    roomType: 'Colonial Balcony Ocean Suite',
-    checkIn: '2026-08-20',
-    checkOut: '2026-08-24',
-    roomsCount: 1,
-    pricePerNightUSD: 110,
-    totalHotelUSD: 440,
-    hotelStatus: 'Reserved',
-    voucherIssued: true,
-    guideId: 'emp-006',
-    guideName: 'Rahel Kidane',
-    guidePhone: '+291 7 678901',
-    guideLanguages: ['Tigrinya', 'English', 'French', 'Arabic'],
-    driverId: 'emp-004',
-    driverName: 'Yemane Gebrehiwet',
-    driverPhone: '+291 7 456789',
-    driverLicenseValid: true,
-    vehicleId: 'veh-007',
-    vehicleName: 'Toyota Land Cruiser Prado TXL 4WD (Rented)',
-    vehiclePlate: 'ER-2-31048',
-    vehicleCap: 5,
-    vehicleType: '4WD SUV Convoy',
-    staffStatus: 'Assigned',
-    createdAt: '2026-08-16',
-  },
-
-  // 5. Hiroshi Tanaka (Single Solo Steam Train & UNESCO Architect)
-  {
-    id: 'exp-005',
-    leadName: 'Hiroshi Tanaka',
-    situation: 'Single',
-    partyTitle: 'Hiroshi Tanaka — Modernist Asmara & Steam Rail',
-    paxCount: 1,
-    isVip: false,
-    nationality: 'Japanese',
-    occupation: 'Architectural Archivist & Steam Historian',
-    passportNumber: 'JP88112233',
-    passportExpiry: '2031-01-22',
-    email: 'h.tanaka@tokyo-adventure.jp',
-    phone: '+81 90 5544 3322',
-    dietary: 'Standard / Japanese Tea Lover',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
-    travelerStatus: 'Active Traveler',
-    emergencyContact: {
-      name: 'Kenji Tanaka',
-      relation: 'Brother',
-      phone: '+81 90 5544 3300',
-    },
-    familyMembers: [],
-    daysPlanned: 3,
-    routeSummary: 'Asmara UNESCO Art Deco Modernist Arcades → Steam Railway Charter → Medebar',
-    schedule: [
-      {
-        dayNumber: 1,
-        title: 'Asmara UNESCO 1930s Futuristic Architecture Walk',
-        location: 'Asmara Historic Center',
-        lodging: 'Albergo Italia (Historic 1899)',
-        mealPlan: 'Dinner only',
-        transportMode: 'Toyota Land Cruiser V8 Prado 4WD #1',
-        activitiesNotes: 'Archival tour of Cinema Roma, Tagliero Airplane Station, and vintage Italian espresso bars.',
-      },
-      {
-        dayNumber: 2,
-        title: 'Historic Steam Railway Charter to Arbaroba Viaducts',
-        location: 'Asmara to Arbaroba Escarpment',
-        lodging: 'Albergo Italia (Historic 1899)',
-        mealPlan: 'Full Board (B+L+D)',
-        transportMode: '1938 Ansaldo Steam Engine #442',
-        activitiesNotes: 'Exclusive steam locomotive journey through dramatic tunnels and cliffside bridges.',
-      },
-      {
-        dayNumber: 3,
-        title: 'Medebar Artisans & Enda Mariam Cathedral',
-        location: 'Medebar Market',
-        lodging: 'Albergo Italia (Historic 1899)',
-        mealPlan: 'Breakfast & Lunch',
-        transportMode: 'Toyota Land Cruiser V8 Prado 4WD #1',
-        activitiesNotes: 'Traditional metalcrafting, spice mills, and cultural architectural documentation.',
-      },
-    ],
-    hotelIncluded: true,
-    hotelId: 'htl-002',
-    hotelName: 'Albergo Italia (Historic 1899)',
-    roomType: 'Colonial Heritage Balcony Suite',
-    checkIn: '2026-08-15',
-    checkOut: '2026-08-18',
-    roomsCount: 1,
-    pricePerNightUSD: 135,
-    totalHotelUSD: 405,
-    hotelStatus: 'Reserved',
-    voucherIssued: true,
-    guideId: 'emp-002',
-    guideName: 'Senait Tesfay',
-    guidePhone: '+291 7 234567',
-    guideLanguages: ['Tigrinya', 'English', 'Italian'],
-    driverId: 'emp-004',
-    driverName: 'Habte Michael',
-    driverPhone: '+291 7 334455',
-    driverLicenseValid: true,
-    vehicleId: 'veh-001',
-    vehicleName: 'Toyota Land Cruiser V8 Prado 4WD #1',
-    vehiclePlate: 'ER-2-18492',
-    vehicleCap: 5,
-    vehicleType: '4WD SUV Convoy',
-    staffStatus: 'Assigned',
-    createdAt: '2026-08-10',
-  },
-];
+const INITIAL_EXPEDITIONS: TouristExpedition[] = [NEW_SAMPLE_EXPEDITION];
 
 export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
   hotels = mockHotels,
   employees = mockEmployees,
   vehicles = mockVehicles,
+  expeditions: propExpeditions,
+  onSaveExpedition,
+  onDeleteExpedition,
 }) => {
   // State for all expeditions
-  const [expeditions, setExpeditions] = useState<TouristExpedition[]>(INITIAL_EXPEDITIONS);
+  const [expeditions, setExpeditions] = useState<TouristExpedition[]>(propExpeditions || INITIAL_EXPEDITIONS);
+
+  // Keep in sync with parent prop if provided
+  useEffect(() => {
+    if (propExpeditions) {
+      setExpeditions(propExpeditions);
+    }
+  }, [propExpeditions]);
   
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -601,10 +221,15 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
   // Save / Update Expedition
   const handleSaveExpedition = (saved: TouristExpedition) => {
     const exists = expeditions.some((e) => e.id === saved.id);
+    let updated: TouristExpedition[];
     if (exists) {
-      setExpeditions(expeditions.map((e) => (e.id === saved.id ? saved : e)));
+      updated = expeditions.map((e) => (e.id === saved.id ? saved : e));
     } else {
-      setExpeditions([saved, ...expeditions]);
+      updated = [saved, ...expeditions];
+    }
+    setExpeditions(updated);
+    if (onSaveExpedition) {
+      onSaveExpedition(saved);
     }
     setIsModalOpen(false);
     setEditingExpedition(null);
@@ -613,7 +238,26 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
   // Delete Expedition
   const handleDeleteExpedition = (id: string) => {
     if (confirm('Are you sure you want to remove this tourist expedition record?')) {
-      setExpeditions(expeditions.filter((e) => e.id !== id));
+      const updated = expeditions.filter((e) => e.id !== id);
+      setExpeditions(updated);
+      if (onDeleteExpedition) {
+        onDeleteExpedition(id);
+      }
+    }
+  };
+
+  // Clear all data
+  const handleClearAll = () => {
+    if (confirm('Are you sure you want to remove all tourist operations data?')) {
+      setExpeditions([]);
+    }
+  };
+
+  // Reset to form-generated sample
+  const handleResetSample = () => {
+    setExpeditions([NEW_SAMPLE_EXPEDITION]);
+    if (onSaveExpedition) {
+      onSaveExpedition(NEW_SAMPLE_EXPEDITION);
     }
   };
 
@@ -741,12 +385,30 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
             </p>
           </div>
 
-          <button
-            onClick={handleAddNew}
-            className="px-6 py-3.5 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs sm:text-sm font-black uppercase tracking-wider shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0"
-          >
-            <Plus className="w-5 h-5 text-slate-950" /> ADD TOURIST & ITINERARY
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <button
+              onClick={handleAddNew}
+              className="px-6 py-3.5 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs sm:text-sm font-black uppercase tracking-wider shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0"
+            >
+              <Plus className="w-5 h-5 text-slate-950" /> Add Tourist, Build Itinerary & Reserve Services
+            </button>
+            <button
+              onClick={handleResetSample}
+              title="Reset to fresh sample data generated via form"
+              className="px-4 py-3 rounded-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <FileCheck className="w-4 h-4 text-emerald-600" /> Reset Sample Data
+            </button>
+            {expeditions.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                title="Remove all operations data completely"
+                className="px-4 py-3 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" /> Clear All Data
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -857,8 +519,10 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
           >
             <option value="All">All Situations</option>
             <option value="Single">Single (Solo)</option>
+            <option value="Couple">Couple (2 Pax)</option>
             <option value="Family">Family Tour</option>
-            <option value="Group">Group Delegation</option>
+            <option value="Group">Group</option>
+            <option value="Delegation">Official Delegation</option>
           </select>
 
           {/* Hotel Filter */}
@@ -1176,12 +840,12 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
                           </h5>
 
                           <p className="text-[11px] text-slate-600 line-clamp-3 leading-relaxed">
-                            {day.activitiesNotes}
+                            {day.activities || (day as any).activitiesNotes}
                           </p>
 
                           <div className="border-t border-slate-100 pt-2 flex flex-col gap-1 text-[10px] text-slate-500 font-mono">
                             <div>🏨 <span className="font-semibold text-slate-800">{day.lodging}</span></div>
-                            <div>🍽️ {day.mealPlan} · 🚗 {day.transportMode}</div>
+                            <div>🍽️ {day.mealPlan} · 🚗 {day.transport || (day as any).transportMode}</div>
                           </div>
                         </div>
                       ))}
