@@ -71,7 +71,6 @@ import { IssueTicketModal } from './components/tickets/IssueTicketModal';
 import { HotelReservationModal } from './components/hotels/HotelReservationModal';
 import { AddTouristActivityModal } from './components/tourists/AddTouristActivityModal';
 import { SampleDataModal } from './components/settings/SampleDataModal';
-import { mockTicketingClients } from './mockData';
 
 export default function App() {
   // Navigation State
@@ -113,12 +112,11 @@ export default function App() {
   const [persistedClients, setPersistedClients] = useCollection<TicketingClient>('ticketingClients');
 
   const ticketingClients = useMemo(() => {
-    if (persistedClients && persistedClients.length > 0) return persistedClients;
-    return mockTicketingClients;
+    return persistedClients || [];
   }, [persistedClients]);
 
   const handleAddTicketingClient = (newClient: TicketingClient) => {
-    setPersistedClients((prev) => [newClient, ...(prev && prev.length > 0 ? prev : mockTicketingClients)]);
+    setPersistedClients((prev) => [newClient, ...(prev || [])]);
     const alert: NotificationItem = {
       id: `notif-${Date.now()}`,
       title: `New Ticketing Client Registered`,

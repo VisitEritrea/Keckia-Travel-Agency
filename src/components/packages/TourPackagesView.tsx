@@ -392,13 +392,6 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
             >
               <Plus className="w-5 h-5 text-slate-950" /> Add Tourist, Build Itinerary & Reserve Services
             </button>
-            <button
-              onClick={handleResetSample}
-              title="Reset to fresh sample data generated via form"
-              className="px-4 py-3 rounded-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
-            >
-              <FileCheck className="w-4 h-4 text-emerald-600" /> Reset Sample Data
-            </button>
             {expeditions.length > 0 && (
               <button
                 onClick={handleClearAll}

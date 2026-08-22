@@ -452,7 +452,14 @@ let genAiClient: GoogleGenAI | null = null;
 function getGenAi(): GoogleGenAI | null {
   if (!genAiClient && process.env.GEMINI_API_KEY) {
     try {
-      genAiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      genAiClient = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            "User-Agent": "aistudio-build",
+          },
+        },
+      });
     } catch (err) {
       console.warn("Failed to initialize GoogleGenAI client:", err);
     }
@@ -461,107 +468,120 @@ function getGenAi(): GoogleGenAI | null {
 }
 
 async function draftWithGemini(prompt: string): Promise<string | null> {
+  const modelsToTry = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.7-flash"];
   const ai = getGenAi();
   if (ai) {
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
-        contents: prompt,
-      });
-      if (response.text) return response.text;
-    } catch (err) {
-      console.warn("GoogleGenAI draft error, attempting fallback:", err);
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: prompt,
+        });
+        if (response.text) return response.text;
+      } catch (err) {
+        console.warn(`GoogleGenAI draft error on ${modelName}, trying next fallback:`, err);
+      }
     }
   }
 
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      },
-    );
-    if (!res.ok) return null;
-    const json: any = await res.json();
-    return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-  } catch {
-    return null;
+  for (const modelName of modelsToTry) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        },
+      );
+      if (!res.ok) continue;
+      const json: any = await res.json();
+      const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 async function ocrPassportWithGemini(imageBase64: string, mimeType: string = "image/jpeg"): Promise<any | null> {
-  const cleanBase64 = imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, '').trim();
+  const cleanBase64 = imageBase64.includes(";base64,")
+    ? imageBase64.split(";base64,")[1].trim()
+    : imageBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, "").trim();
   const effectiveMime = mimeType?.includes("pdf") ? "application/pdf" : (mimeType || "image/jpeg");
 
-  const prompt = `You are an expert biometric passport OCR, MRZ reader and identity verification system for tourist visas to the State of Eritrea.
-Carefully analyze the provided passport image, photo page, or travel document.
-Extract all possible identity and travel details and return ONLY a valid JSON object with NO surrounding markdown fences or explanation:
+  const prompt = `You are a high-precision international biometric passport OCR engine, ICAO 9303 MRZ parser, and travel dossier analyzer for the State of Eritrea Tour Operations and Travel Agency.
+
+Analyze the uploaded passport photo page, national ID card, visa, or travel dossier PDF.
+Read both the Visual Inspection Zone (VIZ) AND the Machine Readable Zone (MRZ 2-line or 3-line format).
+
+EXTRACTION & NORMALIZATION GUIDELINES:
+1. FULL NAME: Combine Given Names and Surname into natural order (e.g. "John Arthur Smith" or "Dr. Arthur Pendelton"). Do not include filler brackets "<".
+2. PASSPORT NUMBER: Clean alphanumeric document number (e.g. "GB98234112", "C11009823", "USA55489012").
+3. DATE OF BIRTH: Standard ISO format "YYYY-MM-DD" (e.g. "1984-06-15"). Parse from MRZ YYMMDD (if YY > 25, 19YY; if YY <= 25, 20YY) or visual text (e.g. "15 JUN 1984" -> "1984-06-15").
+4. PASSPORT EXPIRY DATE: Standard ISO format "YYYY-MM-DD" (e.g. "2031-11-20"). Parse from MRZ or visual text.
+5. NATIONALITY: Full English demonym (e.g. "British", "Eritrean", "American", "German", "French", "Swiss", "Italian", "Canadian", "Australian", "Dutch", "Swedish", "Ethiopian", "Egyptian", "Saudi", etc.). If only ISO 3-letter code is present in MRZ (e.g. GBR, USA, DEU, FRA, ERI, CHE, ITA, CAN, AUS, ETH), expand it into full nationality.
+6. GENDER / SEX: Standardize strictly to "Male" or "Female" (or "Other" if non-binary). "M", "MALE", "HOMME", "MASCULIN" -> "Male". "F", "FEMALE", "FEMME", "FEMININ" -> "Female".
+7. ISSUE COUNTRY: Issuing State or country (e.g. "United Kingdom", "Eritrea", "France", "Germany", "United States").
+8. CONTACT & HEALTH DETAILS: Extract email, phone number, occupation, dietary notes, medical notes, insurance number, emergency contact details ONLY IF explicitly printed on the document or dossier.
+9. COMPANIONS / PARTY MEMBERS: If this is a multi-person travel dossier, group list, or family pass, extract all other travelers into the "companions" array.
+
+CRITICAL RULE FOR ABSENT INFORMATION:
+If ANY field is not present or visible in the document, return an empty string "" (or empty array []). NEVER invent, guess, or hallucinate placeholder data for missing fields.
+
+Return ONLY a raw JSON object with NO markdown formatting:
 {
-  "fullName": "Full Legal Name as shown on passport",
-  "passportNumber": "Passport Number (e.g. GB98234112)",
-  "passportExpiry": "YYYY-MM-DD",
-  "dob": "YYYY-MM-DD",
-  "nationality": "Full nationality name (e.g. British, United States, German, French, Italian, Swiss, Japanese, Swedish, Canadian, Australian)",
-  "gender": "Male or Female",
-  "occupation": "Profession or traveler occupation",
-  "email": "Email address if visible or standard traveler handle",
-  "phone": "Phone number if visible",
-  "dietary": "Standard / No Restrictions or noted dietary requirements",
-  "medicalNotes": "None or noted medical details",
-  "insurancePolicyNumber": "Insurance policy number if visible",
-  "emergencyName": "Emergency contact name if visible",
-  "emergencyRelation": "Emergency contact relation",
-  "emergencyPhone": "Emergency contact phone",
-  "detectedDocumentType": "Biometric Passport Scan / Travel PDF",
-  "confidenceScore": 98
+  "fullName": "Full Legal Name or empty string",
+  "passportNumber": "Passport Number or empty string",
+  "passportExpiry": "YYYY-MM-DD or empty string",
+  "dateOfBirth": "YYYY-MM-DD or empty string",
+  "dob": "YYYY-MM-DD or empty string",
+  "nationality": "Full Nationality or empty string",
+  "gender": "Male or Female or empty string",
+  "sex": "Male or Female or empty string",
+  "passportIssueCountry": "Issuing Country or empty string",
+  "occupation": "Occupation or empty string",
+  "email": "Email address or empty string",
+  "phone": "Phone number or empty string",
+  "dietaryRequirements": "Dietary notes or empty string",
+  "dietary": "Dietary notes or empty string",
+  "medicalNotes": "Medical notes or empty string",
+  "insurancePolicyNumber": "Insurance policy number or empty string",
+  "partyTitle": "Expedition or group name or empty string",
+  "emergencyName": "Emergency contact name or empty string",
+  "emergencyRelation": "Emergency relation or empty string",
+  "emergencyRelationship": "Emergency relation or empty string",
+  "emergencyPhone": "Emergency contact phone or empty string",
+  "detectedDocumentType": "Biometric Passport Scan / Travel PDF Dossier",
+  "confidenceScore": 99,
+  "companions": [
+    {
+      "fullName": "Companion Name",
+      "relationship": "Spouse / Child / Colleague / Partner / etc.",
+      "passportNumber": "Companion Passport No. or empty string",
+      "passportExpiry": "YYYY-MM-DD or empty string",
+      "dateOfBirth": "YYYY-MM-DD or empty string",
+      "dob": "YYYY-MM-DD or empty string",
+      "nationality": "Full Nationality or empty string",
+      "gender": "Male or Female or empty string",
+      "occupation": "Occupation or empty string",
+      "dietaryRequirements": "Dietary notes or empty string",
+      "medicalNotes": "Medical notes or empty string"
+    }
+  ]
 }`;
 
   const ai = getGenAi();
-  if (ai) {
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
-        contents: [
-          {
-            parts: [
-              {
-                inlineData: {
-                  mimeType: effectiveMime,
-                  data: cleanBase64,
-                },
-              },
-              { text: prompt },
-            ],
-          },
-        ],
-      });
-      const text = response.text;
-      if (text) {
-        const cleanText = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
-        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed && parsed.fullName) return parsed;
-        }
-      }
-    } catch (err) {
-      console.warn("GoogleGenAI OCR execution warning:", err);
-    }
-  }
+  const modelsToTry = ["gemini-3.7-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
 
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+  if (ai) {
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
           contents: [
             {
               parts: [
@@ -575,21 +595,74 @@ Extract all possible identity and travel details and return ONLY a valid JSON ob
               ],
             },
           ],
-        }),
-      },
-    );
-    if (!res.ok) return null;
-    const json: any = await res.json();
-    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return null;
-    const cleanText = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
-    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-    return null;
-  } catch (err) {
-    console.error("Gemini Passport OCR error:", err);
-    return null;
+        });
+        const text = response.text;
+        if (text) {
+          const cleanText = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
+          const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed && (parsed.fullName || parsed.passportNumber || parsed.nationality || parsed.name)) {
+              return {
+                ...parsed,
+                detectedModel: modelName,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`GoogleGenAI OCR execution warning on ${modelName}, trying next fallback:`, err);
+      }
+    }
   }
+
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+
+  for (const modelName of modelsToTry) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: effectiveMime,
+                      data: cleanBase64,
+                    },
+                  },
+                  { text: prompt },
+                ],
+              },
+            ],
+          }),
+        },
+      );
+      if (!res.ok) continue;
+      const json: any = await res.json();
+      const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) continue;
+      const cleanText = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed && (parsed.fullName || parsed.passportNumber || parsed.nationality || parsed.name)) {
+          return {
+            ...parsed,
+            detectedModel: modelName,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn(`REST OCR attempt on ${modelName} failed:`, err);
+    }
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1238,6 +1311,70 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
     return handlePublic(req, rest);
   }
 
+  /* ---------------- AI drafting & Passport OCR (no session required) ---------------- */
+  if (head === "ai" && req.method === "POST") {
+    const kind = rest[0];
+    const b = req.body ?? {};
+
+    if (kind === "draft-voa") {
+      const prompt = `You are Head of Consular Affairs at EritreaVisit Tours & Travel, Asmara, Eritrea.
+Draft a formal Visa on Arrival sponsorship guarantee letter addressed to the Department of Immigration and Nationality, Ministry of Internal Affairs, State of Eritrea.
+Traveller: ${b.touristName}; Passport: ${b.passportNumber}; Nationality: ${b.nationality};
+Tour: ${b.tourTitle}; Arrival: ${b.arrivalDate}; Departure: ${b.departureDate};
+Port of entry: ${b.entryPort || "Asmara International Airport (ASM)"}.
+Guarantee full logistical, accommodation and medical sponsorship and repatriation. Output only the letter body.`;
+      const drafted = await draftWithGemini(prompt);
+      if (drafted) return ok({ success: true, letterBody: drafted });
+      return ok({
+        success: true,
+        fallback: true,
+        letterBody:
+          `This is to certify that EritreaVisit Tours & Travel (Licence No. LIC/TOUR/MoT-ER-00214) formally sponsors and assumes full logistical responsibility for ${b.touristName || "the traveller"}, holder of passport number ${b.passportNumber || "N/A"} (Nationality: ${b.nationality || "International"}). The traveller arrives in the State of Eritrea via ${b.entryPort || "Asmara International Airport (ASM)"} on ${b.arrivalDate || "the scheduled arrival date"} to join the guided programme "${b.tourTitle || "Eritrea Discovery"}" until ${b.departureDate || "the scheduled departure date"}. We guarantee accommodation, in-country transport, medical assistance and timely repatriation for the duration of the visit, and respectfully request that the Department of Immigration and Nationality grant the Visa on Arrival facility.`,
+      });
+    }
+
+    if (kind === "generate-itinerary") {
+      const prompt = `Design a ${b.days || 5}-day Eritrea tour itinerary for ${b.destination || "Asmara and the Red Sea coast"}.
+Difficulty: ${b.difficulty || "Moderate"}. Theme: ${b.focusTheme || "heritage and coastline"}.
+Return one line per day in the form "Day N | Title | Location | Description".`;
+      const drafted = await draftWithGemini(prompt);
+      if (drafted) return ok({ success: true, itinerary: drafted });
+      return ok({
+        success: true,
+        fallback: true,
+        itinerary: [
+          "Day 1 | Arrival & Art Deco Asmara | Asmara | Airport welcome, Harnet Avenue walking tour, Cinema Impero and Fiat Tagliero.",
+          "Day 2 | Highland Heritage | Asmara & Debub | Medeber market, National Museum, then the highland escarpment viewpoints.",
+          "Day 3 | Descent to the Red Sea | Massawa | The Asmara–Massawa railway descent, Ottoman old town and the harbour at dusk.",
+          "Day 4 | Dahlak Archipelago | Dahlak Kebir | Boat transfer, snorkelling over the reef and a beach lunch on the island.",
+          "Day 5 | Qohaito & Departure | Qohaito / Asmara | Pre-Aksumite ruins and Adi Alauti canyon rock art, return to Asmara for departure.",
+        ].join("\n"),
+      });
+    }
+
+    if (kind === "ocr-passport" || kind === "scan-passport" || kind === "scan-document") {
+      const { imageBase64, base64Data, image, mimeType, filename, fileName } = b;
+      const dataPayload = imageBase64 || base64Data || image;
+      let ocrResult: any = null;
+      if (dataPayload) {
+        try {
+          ocrResult = await ocrPassportWithGemini(dataPayload, mimeType || "image/jpeg");
+        } catch (ocrErr) {
+          console.error("OCR execution error:", ocrErr);
+          ocrResult = null;
+        }
+      }
+
+      if (!ocrResult || (!ocrResult.fullName && !ocrResult.passportNumber && !ocrResult.nationality && !ocrResult.name)) {
+        return ok({ success: false, error: "Unable to extract passport information. Please ensure the document is clear and readable." });
+      }
+
+      return ok({ success: true, data: ocrResult, ...ocrResult });
+    }
+
+    return fail(404, "Unknown AI action.");
+  }
+
   /* ---------- everything below requires a session ---------- */
   const user = await sessionUser(req);
   if (!user) return fail(401, "Sign in required.");
@@ -1433,68 +1570,6 @@ async function route(req: ApiRequest): Promise<ApiResponse> {
       summary: `Loaded ${inserted} starter records into empty collections.`, severity: "warning",
     });
     return ok({ inserted });
-  }
-
-  /* ---------------- AI drafting ---------------- */
-  if (head === "ai" && req.method === "POST") {
-    const kind = rest[0];
-    const b = req.body ?? {};
-
-    if (kind === "draft-voa") {
-      const prompt = `You are Head of Consular Affairs at EritreaVisit Tours & Travel, Asmara, Eritrea.
-Draft a formal Visa on Arrival sponsorship guarantee letter addressed to the Department of Immigration and Nationality, Ministry of Internal Affairs, State of Eritrea.
-Traveller: ${b.touristName}; Passport: ${b.passportNumber}; Nationality: ${b.nationality};
-Tour: ${b.tourTitle}; Arrival: ${b.arrivalDate}; Departure: ${b.departureDate};
-Port of entry: ${b.entryPort || "Asmara International Airport (ASM)"}.
-Guarantee full logistical, accommodation and medical sponsorship and repatriation. Output only the letter body.`;
-      const drafted = await draftWithGemini(prompt);
-      if (drafted) return ok({ success: true, letterBody: drafted });
-      return ok({
-        success: true,
-        fallback: true,
-        letterBody:
-          `This is to certify that EritreaVisit Tours & Travel (Licence No. LIC/TOUR/MoT-ER-00214) formally sponsors and assumes full logistical responsibility for ${b.touristName || "the traveller"}, holder of passport number ${b.passportNumber || "N/A"} (Nationality: ${b.nationality || "International"}). The traveller arrives in the State of Eritrea via ${b.entryPort || "Asmara International Airport (ASM)"} on ${b.arrivalDate || "the scheduled arrival date"} to join the guided programme "${b.tourTitle || "Eritrea Discovery"}" until ${b.departureDate || "the scheduled departure date"}. We guarantee accommodation, in-country transport, medical assistance and timely repatriation for the duration of the visit, and respectfully request that the Department of Immigration and Nationality grant the Visa on Arrival facility.`,
-      });
-    }
-
-    if (kind === "generate-itinerary") {
-      const prompt = `Design a ${b.days || 5}-day Eritrea tour itinerary for ${b.destination || "Asmara and the Red Sea coast"}.
-Difficulty: ${b.difficulty || "Moderate"}. Theme: ${b.focusTheme || "heritage and coastline"}.
-Return one line per day in the form "Day N | Title | Location | Description".`;
-      const drafted = await draftWithGemini(prompt);
-      if (drafted) return ok({ success: true, itinerary: drafted });
-      return ok({
-        success: true,
-        fallback: true,
-        itinerary: [
-          "Day 1 | Arrival & Art Deco Asmara | Asmara | Airport welcome, Harnet Avenue walking tour, Cinema Impero and Fiat Tagliero.",
-          "Day 2 | Highland Heritage | Asmara & Debub | Medeber market, National Museum, then the highland escarpment viewpoints.",
-          "Day 3 | Descent to the Red Sea | Massawa | The Asmara–Massawa railway descent, Ottoman old town and the harbour at dusk.",
-          "Day 4 | Dahlak Archipelago | Dahlak Kebir | Boat transfer, snorkelling over the reef and a beach lunch on the island.",
-          "Day 5 | Qohaito & Departure | Qohaito / Asmara | Pre-Aksumite ruins and Adi Alauti canyon rock art, return to Asmara for departure.",
-        ].join("\n"),
-      });
-    }
-
-    if (kind === "ocr-passport" || kind === "scan-passport") {
-      const { imageBase64, mimeType, filename, memberRelation } = b;
-      let ocrResult: any = null;
-      if (imageBase64) {
-        try {
-          ocrResult = await ocrPassportWithGemini(imageBase64, mimeType || "image/jpeg");
-        } catch {
-          ocrResult = null;
-        }
-      }
-
-      if (!ocrResult || !ocrResult.fullName) {
-        return ok({ success: false, error: "Unable to extract passport information. Please ensure the document is clear and readable." });
-      }
-
-      return ok({ success: true, ...ocrResult });
-    }
-
-    return fail(404, "Unknown AI action.");
   }
 
   return fail(404, "Unknown endpoint.");

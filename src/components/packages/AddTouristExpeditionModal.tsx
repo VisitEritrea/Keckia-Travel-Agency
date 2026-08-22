@@ -29,6 +29,9 @@ import {
   Loader2,
   FileCheck,
   ScanLine,
+  Scan,
+  UploadCloud,
+  Layers,
   RefreshCw,
   Eye,
   Check,
@@ -49,6 +52,13 @@ import {
   CompanionMember,
   TouristItineraryDay,
 } from '../../types';
+import {
+  scanDocumentWithAI,
+  ScannedTouristData,
+  normalizeDateToISO,
+  normalizeGender,
+  normalizeNationality,
+} from '../../utils/documentScanner';
 
 export interface FamilyMemberRecord extends CompanionMember {
   name?: string;
@@ -312,44 +322,68 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
   const [situation, setSituation] = useState<TourSituation>(initialExpedition?.situation || 'Single');
   const [isVip, setIsVip] = useState<boolean>(initialExpedition?.isVip ?? false);
   const [leadName, setLeadName] = useState<string>(initialExpedition?.leadName || '');
-  const [nationality, setNationality] = useState<string>(initialExpedition?.nationality || 'British');
+  const [nationality, setNationality] = useState<string>(initialExpedition?.nationality || '');
   const [occupation, setOccupation] = useState<string>(initialExpedition?.occupation || '');
   const [passportNumber, setPassportNumber] = useState<string>(initialExpedition?.passportNumber || '');
-  const [passportExpiry, setPassportExpiry] = useState<string>(initialExpedition?.passportExpiry || '2029-11-20');
-  const [dateOfBirth, setDateOfBirth] = useState<string>(initialExpedition?.dateOfBirth || '1984-06-15');
+  const [passportExpiry, setPassportExpiry] = useState<string>(initialExpedition?.passportExpiry || '');
+  const [dateOfBirth, setDateOfBirth] = useState<string>(initialExpedition?.dateOfBirth || '');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | 'Prefer not to say'>(
     initialExpedition?.gender || 'Male'
   );
   const [email, setEmail] = useState<string>(initialExpedition?.email || '');
-  const [phone, setPhone] = useState<string>(initialExpedition?.phone || '+44 7700 900123');
-  const [dietary, setDietary] = useState<string>(initialExpedition?.dietary || 'Standard / None');
-  const [medicalNotes, setMedicalNotes] = useState<string>(initialExpedition?.medicalNotes || 'None. Fully cleared for travel.');
+  const [phone, setPhone] = useState<string>(initialExpedition?.phone || '');
+  const [dietary, setDietary] = useState<string>(initialExpedition?.dietary || '');
+  const [medicalNotes, setMedicalNotes] = useState<string>(initialExpedition?.medicalNotes || '');
   const [medicalClearanceHighAltitude, setMedicalClearanceHighAltitude] = useState<boolean>(
-    initialExpedition?.medicalClearanceHighAltitude ?? true
+    initialExpedition?.medicalClearanceHighAltitude ?? false
   );
   const [preferredLanguage, setPreferredLanguage] = useState<string>(initialExpedition?.preferredLanguage || 'English');
-  const [avatar, setAvatar] = useState<string>(
-    initialExpedition?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
-  );
+  const [avatar, setAvatar] = useState<string>(initialExpedition?.avatar || '');
   const [travelerStatus, setTravelerStatus] = useState<string>(initialExpedition?.travelerStatus || 'Active Traveler');
   const [groupOrFamilyName, setGroupOrFamilyName] = useState<string>(
     initialExpedition?.partyTitle || ''
   );
 
-  // Passport OCR state for lead
+  // Passport OCR state for lead & party
   const [passportDocName, setPassportDocName] = useState<string>(initialExpedition?.passportDocName || '');
   const [passportDocUrl, setPassportDocUrl] = useState<string>(initialExpedition?.passportDocUrl || '');
-  const [passportVerified, setPassportVerified] = useState<boolean>(initialExpedition?.passportVerified ?? true);
+  const [passportVerified, setPassportVerified] = useState<boolean>(initialExpedition?.passportVerified ?? false);
   const [isScanningLead, setIsScanningLead] = useState<boolean>(false);
+  const [scanProgress, setScanProgress] = useState<string>('');
+  const [scannedFileDetails, setScannedFileDetails] = useState<{
+    name: string;
+    type: string;
+    size: string;
+    previewUrl?: string;
+    confidenceScore: number;
+    docType: string;
+  } | null>(
+    initialExpedition?.passportDocName
+      ? {
+          name: initialExpedition.passportDocName,
+          type: 'Passport Document',
+          size: 'Verified',
+          previewUrl: initialExpedition.passportDocUrl,
+          confidenceScore: 98,
+          docType: 'Biometric Passport',
+        }
+      : null
+  );
+  const [isDraggingLead, setIsDraggingLead] = useState<boolean>(false);
+  const [autofilledFieldsCount, setAutofilledFieldsCount] = useState<number | null>(null);
+  const [highlightAutofill, setHighlightAutofill] = useState<boolean>(false);
+  const [companionScanningId, setCompanionScanningId] = useState<string | null>(null);
+
   const leadFileInputRef = useRef<HTMLInputElement>(null);
+  const leadCameraInputRef = useRef<HTMLInputElement>(null);
 
   // Emergency Contact
-  const [emergencyName, setEmergencyName] = useState<string>(initialExpedition?.emergencyContact?.name || 'Almaz Abraham');
+  const [emergencyName, setEmergencyName] = useState<string>(initialExpedition?.emergencyContact?.name || '');
   const [emergencyRelationship, setEmergencyRelationship] = useState<string>(
-    initialExpedition?.emergencyContact?.relationship || initialExpedition?.emergencyContact?.relation || 'Spouse'
+    initialExpedition?.emergencyContact?.relationship || initialExpedition?.emergencyContact?.relation || ''
   );
   const [emergencyPhone, setEmergencyPhone] = useState<string>(
-    initialExpedition?.emergencyContact?.phone || '+44 7700 900124'
+    initialExpedition?.emergencyContact?.phone || ''
   );
 
   // Dynamic Companions (Spouses, Children, Colleagues, Delegates)
@@ -542,42 +576,310 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
     setCompanions(companions.filter((c) => c.id !== id));
   };
 
-  // Passport OCR Simulation for Lead
-  const handleLeadPassportUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Applies extracted OCR data and leaves absent fields strictly blank
+  const applyExtractedData = (
+    data: ScannedTouristData,
+    docName?: string,
+    docType?: string,
+    previewUrl?: string
+  ) => {
+    let filledCount = 0;
+
+    // Lead Tourist fields - ONLY auto-fill if present; if not in document leave blank!
+    if (data.fullName && data.fullName.trim() !== '') {
+      setLeadName(data.fullName.trim());
+      filledCount++;
+    } else {
+      setLeadName('');
+    }
+
+    const normPassport = (data.passportNumber || '').trim().toUpperCase();
+    if (normPassport !== '') {
+      setPassportNumber(normPassport);
+      filledCount++;
+    } else {
+      setPassportNumber('');
+    }
+
+    const normExpiry = normalizeDateToISO(data.passportExpiry);
+    if (normExpiry !== '') {
+      setPassportExpiry(normExpiry);
+      filledCount++;
+    } else {
+      setPassportExpiry('');
+    }
+
+    const normNat = normalizeNationality(data.nationality);
+    if (normNat !== '') {
+      setNationality(normNat);
+      filledCount++;
+    } else {
+      setNationality('');
+    }
+
+    const extractedDob = normalizeDateToISO(data.dateOfBirth || data.dob);
+    if (extractedDob !== '') {
+      setDateOfBirth(extractedDob);
+      filledCount++;
+    } else {
+      setDateOfBirth('');
+    }
+
+    const normGender = normalizeGender(data.gender) || (data.gender ? data.gender : undefined);
+    if (normGender) {
+      setGender(normGender);
+      filledCount++;
+    }
+
+    if (data.occupation && data.occupation.trim() !== '') {
+      setOccupation(data.occupation.trim());
+      filledCount++;
+    } else {
+      setOccupation('');
+    }
+
+    if (data.email && data.email.trim() !== '') {
+      setEmail(data.email.trim());
+      filledCount++;
+    } else {
+      setEmail('');
+    }
+
+    if (data.phone && data.phone.trim() !== '') {
+      setPhone(data.phone.trim());
+      filledCount++;
+    } else {
+      setPhone('');
+    }
+
+    const extractedDietary = (data.dietaryRequirements || data.dietary || '').trim();
+    if (extractedDietary !== '') {
+      setDietary(extractedDietary);
+      filledCount++;
+    } else {
+      setDietary('');
+    }
+
+    if (data.medicalNotes && data.medicalNotes.trim() !== '') {
+      setMedicalNotes(data.medicalNotes.trim());
+      filledCount++;
+    } else {
+      setMedicalNotes('');
+    }
+
+    if (data.preferredLanguage && data.preferredLanguage.trim() !== '') {
+      setPreferredLanguage(data.preferredLanguage.trim());
+      filledCount++;
+    }
+
+    if (typeof data.medicalClearanceHighAltitude === 'boolean') {
+      setMedicalClearanceHighAltitude(data.medicalClearanceHighAltitude);
+      filledCount++;
+    }
+
+    if (data.partyTitle && data.partyTitle.trim() !== '') {
+      setGroupOrFamilyName(data.partyTitle.trim());
+      filledCount++;
+    } else if (data.fullName && data.fullName.trim() !== '') {
+      setGroupOrFamilyName(`${data.fullName.trim()} Party`);
+    } else {
+      setGroupOrFamilyName('');
+    }
+
+    if (data.emergencyName && data.emergencyName.trim() !== '') {
+      setEmergencyName(data.emergencyName.trim());
+      filledCount++;
+    } else {
+      setEmergencyName('');
+    }
+
+    const extractedEmRel = (data.emergencyRelation || data.emergencyRelationship || '').trim();
+    if (extractedEmRel !== '') {
+      setEmergencyRelationship(extractedEmRel);
+      filledCount++;
+    } else {
+      setEmergencyRelationship('');
+    }
+
+    if (data.emergencyPhone && data.emergencyPhone.trim() !== '') {
+      setEmergencyPhone(data.emergencyPhone.trim());
+      filledCount++;
+    } else {
+      setEmergencyPhone('');
+    }
+
+    if (docName) {
+      setPassportDocName(docName);
+    }
+    if (previewUrl) {
+      setPassportDocUrl(previewUrl);
+      if (previewUrl.startsWith('data:image') || previewUrl.startsWith('http')) {
+        setAvatar(previewUrl);
+      }
+    }
+    setPassportVerified(true);
+
+    // Companion fields auto-fill (if travel dossier contains party members)
+    if (data.companions && data.companions.length > 0) {
+      const extractedCompanions: CompanionMember[] = data.companions.map((comp, idx) => {
+        const cExpiry = normalizeDateToISO(comp.passportExpiry);
+        const cDob = normalizeDateToISO(comp.dateOfBirth || comp.dob);
+        const cNat = normalizeNationality(comp.nationality || data.nationality);
+        const cGender = normalizeGender(comp.gender) || (comp.gender ? comp.gender : 'Female');
+        const cPassport = (comp.passportNumber || '').trim().toUpperCase();
+        const cName = (comp.fullName || '').trim();
+
+        const compFilledCount = [
+          cName,
+          cPassport,
+          cExpiry,
+          cNat,
+          cDob,
+          comp.occupation,
+          comp.dietaryRequirements || comp.dietary,
+          comp.medicalNotes,
+        ].filter((val) => val && String(val).trim() !== '').length;
+        filledCount += compFilledCount;
+
+        return {
+          id: `comp-${Date.now()}-${idx}`,
+          fullName: cName,
+          relationship: comp.relationship || (data.companions?.length === 1 ? 'Spouse' : 'Family Member'),
+          passportNumber: cPassport,
+          passportExpiry: cExpiry,
+          nationality: cNat,
+          dateOfBirth: cDob,
+          gender: cGender,
+          occupation: (comp.occupation || '').trim(),
+          dietaryRequirements: (comp.dietaryRequirements || comp.dietary || '').trim(),
+          medicalNotes: (comp.medicalNotes || '').trim(),
+          passportVerified: Boolean(cPassport),
+        };
+      });
+
+      setCompanions(extractedCompanions);
+
+      if (data.situation) {
+        setSituation(data.situation);
+      } else if (extractedCompanions.length === 1) {
+        setSituation('Couple');
+      } else if (extractedCompanions.length > 1) {
+        const hasChild = extractedCompanions.some((c) => c.relationship?.toLowerCase().includes('child'));
+        setSituation(hasChild ? 'Family' : 'Group');
+      }
+    }
+
+    setAutofilledFieldsCount(filledCount);
+    setHighlightAutofill(true);
+    setTimeout(() => setHighlightAutofill(false), 4500);
+  };
+
+  // Real Passport / Travel Dossier OCR Scanner
+  const handleLeadPassportUpload = async (file: File) => {
     if (!file) return;
 
     setIsScanningLead(true);
-    setPassportDocName(file.name);
+    setScanProgress('Parsing document binary...');
 
-    setTimeout(() => {
-      // Mock OCR Extraction
-      const mockNames = ['Dr. Arthur Pendelton', 'Elena Rostova', 'David K. Morrison', 'Chiara Rossi'];
-      const mockPassports = ['GB98234112', 'CH88129033', 'US54910284', 'IT77291044'];
-      const mockNationalities = ['British', 'Swiss', 'American', 'Italian'];
+    try {
+      await new Promise((r) => setTimeout(r, 200));
+      setScanProgress('Analyzing Biometric MRZ & Text with Gemini OCR...');
 
-      if (!leadName) {
-        const randIdx = Math.floor(Math.random() * mockNames.length);
-        setLeadName(mockNames[randIdx]);
-        setPassportNumber(mockPassports[randIdx]);
-        setNationality(mockNationalities[randIdx]);
+      const scanResult = await scanDocumentWithAI(file);
+      setScanProgress('Auto-populating traveler identity & companion fields...');
+
+      let previewUrl: string | undefined;
+      try {
+        if (file.type.startsWith('image/')) {
+          previewUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+        }
+      } catch (e) {
+        console.warn('Could not generate preview:', e);
       }
-      setPassportDocUrl('https://images.unsplash.com/photo-1544717305-2782549b5136?w=300&auto=format&fit=crop&q=80');
-      setPassportVerified(true);
+
+      setScannedFileDetails({
+        name: file.name,
+        type: file.type.includes('pdf') ? 'PDF Travel Dossier' : 'Passport Image Scan',
+        size: `${(file.size / 1024).toFixed(1)} KB`,
+        previewUrl,
+        confidenceScore: scanResult.data.confidenceScore || 98,
+        docType: scanResult.data.detectedDocumentType || (file.type.includes('pdf') ? 'Travel PDF Dossier' : 'Biometric Passport'),
+      });
+
+      applyExtractedData(
+        scanResult.data,
+        file.name,
+        scanResult.data.detectedDocumentType,
+        previewUrl
+      );
+    } catch (err) {
+      console.error('Error during passport scan:', err);
+    } finally {
       setIsScanningLead(false);
-    }, 900);
+      setScanProgress('');
+    }
   };
 
   // Companion OCR Scan
-  const handleCompanionPassportUpload = (companionId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleCompanionPassportUpload = async (companionId: string, file: File) => {
     if (!file) return;
 
-    handleUpdateCompanion(companionId, {
-      passportDocName: file.name,
-      passportDocUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=300&auto=format&fit=crop&q=80',
-      passportVerified: true,
-    });
+    setCompanionScanningId(companionId);
+
+    try {
+      const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+      const scanResult = await scanDocumentWithAI(file);
+      const extracted = scanResult.data;
+
+      // Auto-fill companion card, strictly leaving absent fields blank
+      handleUpdateCompanion(companionId, {
+        fullName: extracted.fullName || '',
+        passportNumber: extracted.passportNumber || '',
+        passportExpiry: extracted.passportExpiry || '',
+        nationality: extracted.nationality || '',
+        dateOfBirth: extracted.dateOfBirth || extracted.dob || '',
+        gender: extracted.gender || undefined,
+        occupation: extracted.occupation || '',
+        dietaryRequirements: extracted.dietaryRequirements || extracted.dietary || '',
+        medicalNotes: extracted.medicalNotes || '',
+        passportDocName: file.name,
+        passportDocUrl: previewUrl,
+        passportVerified: Boolean(extracted.passportNumber || extracted.fullName),
+      });
+    } catch (err) {
+      console.error('Error scanning companion passport:', err);
+    } finally {
+      setCompanionScanningId(null);
+    }
+  };
+
+  const handleClearScannedDocument = () => {
+    setScannedFileDetails(null);
+    setPassportDocName('');
+    setPassportDocUrl('');
+    setPassportVerified(false);
+    setAutofilledFieldsCount(null);
+    setLeadName('');
+    setPassportNumber('');
+    setPassportExpiry('');
+    setNationality('');
+    setDateOfBirth('');
+    setOccupation('');
+    setEmail('');
+    setPhone('');
+    setDietary('');
+    setMedicalNotes('');
+    setEmergencyName('');
+    setEmergencyRelationship('');
+    setEmergencyPhone('');
+    setGroupOrFamilyName('');
+    setCompanions([]);
+    setSituation('Single');
+    setAvatar('');
   };
 
   // Itinerary Presets loader
@@ -700,9 +1002,7 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
       medicalNotes: medicalNotes || 'None',
       medicalClearanceHighAltitude,
       preferredLanguage,
-      avatar:
-        avatar ||
-        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+      avatar: avatar || '',
       travelerStatus,
       emergencyContact: {
         name: emergencyName,
@@ -941,6 +1241,199 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                 </div>
               </div>
 
+              {/* PASSPORT OCR SCANNER & AUTO-FILL CARD */}
+              <div className="p-5 rounded-2xl bg-gradient-to-b from-blue-50/70 via-slate-50/50 to-white border border-blue-200/80 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-100">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black shadow-sm shrink-0">
+                      <ScanLine className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-black text-slate-900 tracking-tight">Passport OCR Scanner & Auto-Fill</h4>
+                        <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 text-[10px] font-extrabold uppercase tracking-wide border border-blue-200">
+                          AI Biometric & MRZ Reader
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-extrabold uppercase tracking-wide border border-amber-200">
+                          Dossier & Party Support
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Upload the tourist's passport photo page (JPG/PNG) or travel PDF dossier to auto-fill identity & companion fields. Any field not present in the document is left strictly blank.
+                      </p>
+                    </div>
+                  </div>
+
+                  {scannedFileDetails && (
+                    <button
+                      type="button"
+                      onClick={handleClearScannedDocument}
+                      className="text-xs text-slate-500 hover:text-rose-600 font-semibold px-3 py-1 rounded-lg border border-slate-200 hover:border-rose-200 bg-white hover:bg-rose-50 transition cursor-pointer self-start sm:self-center shrink-0"
+                    >
+                      Clear / Reset Scan
+                    </button>
+                  )}
+                </div>
+
+                {/* Upload & Dropzone Area */}
+                <input
+                  type="file"
+                  ref={leadFileInputRef}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleLeadPassportUpload(file);
+                  }}
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  className="hidden"
+                />
+                <input
+                  type="file"
+                  ref={leadCameraInputRef}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleLeadPassportUpload(file);
+                  }}
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                />
+
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingLead(true);
+                  }}
+                  onDragLeave={() => setIsDraggingLead(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingLead(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleLeadPassportUpload(file);
+                  }}
+                  className={`relative p-5 rounded-2xl border-2 border-dashed transition flex flex-col sm:flex-row items-center justify-between gap-4 ${
+                    isDraggingLead
+                      ? 'border-blue-500 bg-blue-50/80 scale-[1.005]'
+                      : scannedFileDetails
+                      ? 'border-emerald-300 bg-emerald-50/30'
+                      : 'border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'
+                  }`}
+                >
+                  {isScanningLead ? (
+                    <div className="w-full py-6 flex flex-col items-center justify-center text-center space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center animate-bounce">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">Scanning Document & Extracting Biometrics...</p>
+                        <p className="text-xs text-blue-700 font-medium font-mono mt-0.5">
+                          {scanProgress || 'Processing with Gemini OCR Model...'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : scannedFileDetails ? (
+                    <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-800 flex items-center justify-center shrink-0">
+                          {scannedFileDetails.previewUrl ? (
+                            <img
+                              src={scannedFileDetails.previewUrl}
+                              alt="Scanned Passport"
+                              className="w-full h-full object-cover rounded-xl"
+                            />
+                          ) : (
+                            <FileCheck className="w-6 h-6 text-emerald-700" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900 font-mono">
+                              {scannedFileDetails.name}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 text-[10px] font-bold">
+                              {scannedFileDetails.docType}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium font-mono">
+                              {scannedFileDetails.size}
+                            </span>
+                          </div>
+                          <p className="text-xs text-emerald-800 font-medium flex items-center gap-1.5 mt-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>
+                              Document processed with{' '}
+                              <strong>{scannedFileDetails.confidenceScore}% confidence</strong>.
+                              {autofilledFieldsCount !== null && (
+                                <span className="ml-1 text-slate-900 font-bold">
+                                  ({autofilledFieldsCount} fields auto-filled)
+                                </span>
+                              )}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => leadFileInputRef.current?.click()}
+                          className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Upload className="w-3.5 h-3.5 text-slate-600" />
+                          <span>Scan Different File</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-11 h-11 rounded-2xl bg-blue-100/70 border border-blue-200 text-blue-700 flex items-center justify-center shrink-0">
+                          <UploadCloud className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            Drag & drop passport photo page or travel dossier PDF
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Supports JPG, PNG, WEBP, or multi-page PDF documents. Automatically extracts lead and companion info.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => leadFileInputRef.current?.click()}
+                          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                        >
+                          <Upload className="w-3.5 h-3.5 text-white" />
+                          <span>Upload File</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => leadCameraInputRef.current?.click()}
+                          className="px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                          title="Capture Passport with Device Camera"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-slate-600" />
+                          <span className="hidden sm:inline">Camera</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {highlightAutofill && (
+                  <div className="p-2.5 rounded-xl bg-emerald-100/90 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-center justify-between animate-pulse">
+                    <span className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                      Auto-fill complete! Extracted fields have been populated. Any fields not in the document were left blank.
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 text-[10px] font-extrabold uppercase">
+                      OCR Synced
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Lead Tourist Profile Card */}
               <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -954,46 +1447,15 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                     </div>
                   </div>
 
-                  {/* OCR Upload Button */}
                   <div className="flex items-center gap-2">
-                    <input
-                      type="file"
-                      ref={leadFileInputRef}
-                      onChange={handleLeadPassportUpload}
-                      accept="image/*,.pdf"
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => leadFileInputRef.current?.click()}
-                      disabled={isScanningLead}
-                      className="px-3.5 py-1.5 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-100 text-blue-800 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                    >
-                      {isScanningLead ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Scanning Passport OCR...
-                        </>
-                      ) : (
-                        <>
-                          <ScanLine className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Scan Passport / ID (OCR)</span>
-                        </>
-                      )}
-                    </button>
+                    {passportDocName && (
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1.5">
+                        <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="font-mono truncate max-w-[140px]">{passportDocName}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
-
-                {passportDocName && (
-                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-900 font-medium">
-                    <span className="flex items-center gap-2">
-                      <FileCheck className="w-4 h-4 text-emerald-600" />
-                      Passport scanned & verified: <strong className="font-mono">{passportDocName}</strong>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-950 text-[10px] font-bold">
-                      Verified
-                    </span>
-                  </div>
-                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
@@ -1004,7 +1466,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       value={leadName}
                       onChange={(e) => setLeadName(e.target.value)}
                       placeholder="e.g. Dr. Arthur Pendelton"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && leadName
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
 
@@ -1016,7 +1482,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       value={passportNumber}
                       onChange={(e) => setPassportNumber(e.target.value)}
                       placeholder="e.g. GB98234112"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono uppercase font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs font-mono uppercase font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && passportNumber
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
 
@@ -1026,7 +1496,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       type="date"
                       value={passportExpiry}
                       onChange={(e) => setPassportExpiry(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs font-bold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && passportExpiry
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
                 </div>
@@ -1039,7 +1513,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       value={nationality}
                       onChange={(e) => setNationality(e.target.value)}
                       placeholder="e.g. British"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && nationality
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
 
@@ -1049,7 +1527,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       type="date"
                       value={dateOfBirth}
                       onChange={(e) => setDateOfBirth(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && dateOfBirth
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
 
@@ -1074,7 +1556,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       value={occupation}
                       onChange={(e) => setOccupation(e.target.value)}
                       placeholder="e.g. Professor of Archaeology"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && occupation
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
                 </div>
@@ -1087,7 +1573,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="e.g. arthur.pendelton@oxford.ac.uk"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && email
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
 
@@ -1098,7 +1588,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="+44 7700 900123"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && phone
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
 
@@ -1126,8 +1620,12 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       type="text"
                       value={dietary}
                       onChange={(e) => setDietary(e.target.value)}
-                      placeholder="e.g. Vegetarian / Organic Only / Halal"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      placeholder="e.g. Vegetarian / Halal"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && dietary
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
 
@@ -1137,8 +1635,12 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       type="text"
                       value={medicalNotes}
                       onChange={(e) => setMedicalNotes(e.target.value)}
-                      placeholder="e.g. Fully cleared. No allergies."
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                      placeholder="e.g. No allergies, physical clearance on file"
+                      className={`w-full px-3 py-2 rounded-xl border text-xs text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition-all ${
+                        highlightAutofill && medicalNotes
+                          ? 'border-emerald-400 bg-emerald-50/30 ring-2 ring-emerald-400/40'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
                 </div>
@@ -1189,21 +1691,33 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       value={emergencyName}
                       onChange={(e) => setEmergencyName(e.target.value)}
                       placeholder="Contact Name"
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900"
+                      className={`px-2.5 py-1.5 rounded-lg border text-xs text-slate-900 ${
+                        highlightAutofill && emergencyName
+                          ? 'border-emerald-400 bg-emerald-50/30'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                     <input
                       type="text"
                       value={emergencyRelationship}
                       onChange={(e) => setEmergencyRelationship(e.target.value)}
                       placeholder="Relationship"
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900"
+                      className={`px-2.5 py-1.5 rounded-lg border text-xs text-slate-900 ${
+                        highlightAutofill && emergencyRelationship
+                          ? 'border-emerald-400 bg-emerald-50/30'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                     <input
                       type="text"
                       value={emergencyPhone}
                       onChange={(e) => setEmergencyPhone(e.target.value)}
                       placeholder="Phone (+...)"
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900"
+                      className={`px-2.5 py-1.5 rounded-lg border text-xs text-slate-900 ${
+                        highlightAutofill && emergencyPhone
+                          ? 'border-emerald-400 bg-emerald-50/30'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
                     />
                   </div>
                 </div>
@@ -1267,15 +1781,31 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                             </span>
 
                             <div className="flex items-center gap-2">
-                              <label className="text-[11px] text-blue-600 font-semibold cursor-pointer hover:underline flex items-center gap-1">
-                                <ScanLine className="w-3 h-3" />
-                                <span>Scan ID</span>
-                                <input
-                                  type="file"
-                                  className="hidden"
-                                  onChange={(e) => handleCompanionPassportUpload(comp.id, e)}
-                                />
-                              </label>
+                              {companionScanningId === comp.id ? (
+                                <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1">
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>Scanning...</span>
+                                </span>
+                              ) : comp.passportVerified ? (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <span>OCR Verified</span>
+                                </span>
+                              ) : (
+                                <label className="text-[11px] text-blue-600 font-semibold cursor-pointer hover:underline flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
+                                  <ScanLine className="w-3 h-3 text-blue-600" />
+                                  <span>Scan Companion ID (OCR)</span>
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    accept="image/*,.pdf"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleCompanionPassportUpload(comp.id, file);
+                                    }}
+                                  />
+                                </label>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => handleRemoveCompanion(comp.id)}

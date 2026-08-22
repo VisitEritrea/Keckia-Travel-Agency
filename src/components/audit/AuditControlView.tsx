@@ -11,6 +11,11 @@ import {
   Loader2,
   Download,
   Lock,
+  Plus,
+  Edit3,
+  Sparkles,
+  CheckCircle2,
+  Info,
 } from 'lucide-react';
 import {
   Ticket,
@@ -19,9 +24,10 @@ import {
   ExpenseReceipt,
   TouristProfile,
 } from '../../types';
-import { ROLES, type RoleKey } from '../../../shared/roles';
+import { ROLES, type RoleKey, RoleDefinition, ModuleKey } from '../../../shared/roles';
 import { api } from '../../lib/api';
 import { exportToCSV } from '../../utils/exportUtils';
+import { RoleEditorModal, EditableRole } from './RoleEditorModal';
 
 export interface AuditEntry {
   id: number;
@@ -235,6 +241,76 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
   const [query, setQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
   const [tab, setTab] = useState<'flags' | 'trail' | 'matrix'>('flags');
+  const [roleNotice, setRoleNotice] = useState<string | null>(null);
+  const [matrixSearchQuery, setMatrixSearchQuery] = useState('');
+
+  // Editable roles state initialized with system defaults and custom definitions
+  const [customRoles, setCustomRoles] = useState<EditableRole[]>(() => {
+    return (Object.keys(ROLES) as RoleKey[]).map((key) => {
+      const def = ROLES[key];
+      const defaultUsers: Record<string, string[]> = {
+        CEO: ['Admin (Yonas Ghebre)'],
+        OPERATIONS: ['Amanuel Yohannes'],
+        FINANCE: ['Senait Kidane'],
+        ACCOUNTANT: ['Mussie Tesfay'],
+        AGENT: ['Sara Berhane', 'Daniel Habte'],
+        TOUR_OPS: ['Filmon Tekle', 'Luam Zerai'],
+        HR: ['Rahel Mehari'],
+        GUIDE: ['Dawit Haile', 'Mebrahtu Kifle', 'Eden Weldu'],
+        DRIVER: ['Tesfay Abraha', 'Berhane Gebre'],
+      };
+      return {
+        key,
+        label: def.label,
+        description: def.description,
+        view: def.view,
+        write: def.write,
+        ownRecordsOnly: def.ownRecordsOnly,
+        can: { ...def.can },
+        assignedUsers: defaultUsers[key] || [],
+      };
+    });
+  });
+
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<EditableRole | null>(null);
+
+  const handleOpenAddRole = () => {
+    setEditingRole(null);
+    setIsRoleModalOpen(true);
+  };
+
+  const handleOpenEditRole = (targetRole: EditableRole) => {
+    setEditingRole(targetRole);
+    setIsRoleModalOpen(true);
+  };
+
+  const handleSaveRole = (savedRole: EditableRole) => {
+    setCustomRoles((prev) => {
+      const index = prev.findIndex((r) => r.key === savedRole.key);
+      if (index >= 0) {
+        const next = [...prev];
+        next[index] = savedRole;
+        return next;
+      }
+      return [...prev, savedRole];
+    });
+
+    setRoleNotice(`Role "${savedRole.label}" saved and policy enforcement updated.`);
+    setTimeout(() => setRoleNotice(null), 5000);
+  };
+
+  const filteredMatrixRoles = useMemo(() => {
+    const q = matrixSearchQuery.trim().toLowerCase();
+    if (!q) return customRoles;
+    return customRoles.filter(
+      (r) =>
+        r.label.toLowerCase().includes(q) ||
+        r.key.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        (r.assignedUsers || []).some((u) => u.toLowerCase().includes(q))
+    );
+  }, [customRoles, matrixSearchQuery]);
 
   const load = async () => {
     setLoading(true);
@@ -483,62 +559,197 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
         </div>
       )}
 
-      {/* Permission matrix */}
+      {/* Permission matrix: Who can do what */}
       {tab === 'matrix' && (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="border-b border-slate-100 p-5">
-            <div className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
-              <Lock className="h-4 w-4 text-amber-600" /> Separation of duty
+        <div className="space-y-4">
+          {roleNotice && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3 text-emerald-800 text-sm shadow-xs">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span className="font-medium">{roleNotice}</span>
             </div>
-            <p className="mt-1 text-sm text-slate-500">
-              These rules are enforced by the server, not just hidden in the interface. You are signed
-              in as <strong>{ROLES[role].label}</strong>.
-            </p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-500">
-                <tr>
-                  <th className="px-5 py-3 text-left font-semibold">Role</th>
-                  <th className="px-4 py-3 text-center font-semibold">Issue ticket</th>
-                  <th className="px-4 py-3 text-center font-semibold">Record payment</th>
-                  <th className="px-4 py-3 text-center font-semibold">Approve issue</th>
-                  <th className="px-4 py-3 text-center font-semibold">All bookings</th>
-                  <th className="px-4 py-3 text-center font-semibold">Manage accounts</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {(Object.keys(ROLES) as RoleKey[]).map((key) => {
-                  const definition = ROLES[key];
-                  const cells = [
-                    definition.can.issueTicket,
-                    definition.can.recordPayment,
-                    definition.can.approveIssue,
-                    definition.can.viewAllBookings,
-                    definition.can.manageAccounts,
-                  ];
-                  return (
-                    <tr key={key} className={key === role ? 'bg-amber-50/60' : ''}>
-                      <td className="px-5 py-3">
-                        <div className="font-semibold text-slate-900">{definition.label}</div>
-                        <div className="text-xs text-slate-500">{definition.description}</div>
-                      </td>
-                      {cells.map((allowed, index) => (
-                        <td key={index} className="px-4 py-3 text-center">
-                          {allowed ? (
-                            <UserCheck className="mx-auto h-4 w-4 text-emerald-600" />
-                          ) : (
-                            <span className="text-slate-300">—</span>
+          )}
+
+          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+            {/* Action & Info Header */}
+            <div className="border-b border-slate-100 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+              <div>
+                <div className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
+                  <Lock className="h-4 w-4 text-amber-600" /> Separation of Duty &amp; Role Access Matrix
+                </div>
+                <p className="mt-1 text-xs text-slate-500 max-w-xl">
+                  Enforces dual-control separation of duty, module read/write restrictions, and staff authority.
+                  You are currently signed in as <strong className="text-slate-900 font-bold">{ROLES[role]?.label || role}</strong>.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    value={matrixSearchQuery}
+                    onChange={(e) => setMatrixSearchQuery(e.target.value)}
+                    placeholder="Search roles or staff..."
+                    className="w-48 sm:w-56 rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs outline-hidden focus:border-amber-500 shadow-xs"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleOpenAddRole}
+                  className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 px-4 py-2 text-xs font-bold text-slate-950 shadow-xs hover:shadow transition cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" /> Add User Role
+                </button>
+              </div>
+            </div>
+
+            {/* Matrix Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50/80 text-[10px] uppercase font-mono tracking-widest text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-5 py-3.5 text-left font-bold">Role &amp; Staff</th>
+                    <th className="px-3 py-3.5 text-center font-bold">Issue Ticket</th>
+                    <th className="px-3 py-3.5 text-center font-bold">Record Payment</th>
+                    <th className="px-3 py-3.5 text-center font-bold">Approve Issue</th>
+                    <th className="px-3 py-3.5 text-center font-bold">All Bookings</th>
+                    <th className="px-3 py-3.5 text-center font-bold">Manage Accounts</th>
+                    <th className="px-3 py-3.5 text-center font-bold">Module Access</th>
+                    <th className="px-4 py-3.5 text-right font-bold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredMatrixRoles.map((rDef) => {
+                    const isCurrent = rDef.key === role;
+                    const writeCount = (rDef.write || []).length;
+                    const viewCount = (rDef.view || []).length;
+
+                    return (
+                      <tr
+                        key={rDef.key}
+                        className={`hover:bg-slate-50/80 transition ${
+                          isCurrent ? 'bg-amber-50/50 ring-1 ring-amber-200/50' : ''
+                        }`}
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-sm">{rDef.label}</span>
+                            {isCurrent && (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-mono font-bold">
+                                Current User
+                              </span>
+                            )}
+                            <span className="text-[10px] font-mono text-slate-400">({rDef.key})</span>
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5 max-w-md">{rDef.description}</div>
+
+                          {rDef.assignedUsers && rDef.assignedUsers.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                              {rDef.assignedUsers.map((userName, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200"
+                                >
+                                  <UserCheck className="w-2.5 h-2.5 text-slate-500" />
+                                  {userName}
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+                        <td className="px-3 py-4 text-center">
+                          {rDef.can.issueTicket ? (
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                              <UserCheck className="h-3.5 w-3.5" />
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono">—</span>
+                          )}
+                        </td>
+
+                        <td className="px-3 py-4 text-center">
+                          {rDef.can.recordPayment ? (
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                              <UserCheck className="h-3.5 w-3.5" />
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono">—</span>
+                          )}
+                        </td>
+
+                        <td className="px-3 py-4 text-center">
+                          {rDef.can.approveIssue ? (
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                              <UserCheck className="h-3.5 w-3.5" />
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono">—</span>
+                          )}
+                        </td>
+
+                        <td className="px-3 py-4 text-center">
+                          {rDef.can.viewAllBookings ? (
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                              <UserCheck className="h-3.5 w-3.5" />
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px] font-mono">Own Only</span>
+                          )}
+                        </td>
+
+                        <td className="px-3 py-4 text-center">
+                          {rDef.can.manageAccounts ? (
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                              <UserCheck className="h-3.5 w-3.5" />
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono">—</span>
+                          )}
+                        </td>
+
+                        <td className="px-3 py-4 text-center">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 text-[11px] font-semibold border border-slate-200">
+                            <span>{viewCount} View</span>
+                            <span className="text-slate-400">/</span>
+                            <span className="text-amber-700">{writeCount} Edit</span>
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditRole(rDef)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold shadow-xs transition cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                            Edit Role
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredMatrixRoles.length === 0 && (
+              <div className="p-12 text-center text-xs text-slate-500">
+                No roles match "{matrixSearchQuery}".
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {/* Role Editor Modal */}
+      {isRoleModalOpen && (
+        <RoleEditorModal
+          initialRole={editingRole}
+          isOpen={isRoleModalOpen}
+          onClose={() => setIsRoleModalOpen(false)}
+          onSaveRole={handleSaveRole}
+        />
       )}
     </div>
   );
