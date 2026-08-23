@@ -436,19 +436,46 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
   // STEP 4: ASSIGN GUIDE, DRIVER & FLEET LOGISTICS
   // ---------------------------------------------------------------------------
   const [assignedGuideId, setAssignedGuideId] = useState<string>(
-    initialExpedition?.guideId || initialExpedition?.assignedGuideId || (employees[0]?.id ?? 'emp-001')
+    initialExpedition?.guideId || initialExpedition?.assignedGuideId || (employees?.[0]?.id ?? 'emp-001')
   );
   const [assignedDriverId, setAssignedDriverId] = useState<string>(
-    initialExpedition?.driverId || initialExpedition?.assignedDriverId || (employees[3]?.id ?? 'emp-004')
+    initialExpedition?.driverId || initialExpedition?.assignedDriverId || (employees?.[3]?.id ?? employees?.[0]?.id ?? 'emp-004')
   );
   const [assignedVehicleId, setAssignedVehicleId] = useState<string>(
-    initialExpedition?.vehicleId || initialExpedition?.assignedVehicleId || (vehicles[0]?.id ?? 'veh-001')
+    initialExpedition?.vehicleId || initialExpedition?.assignedVehicleId || (vehicles?.[0]?.id ?? 'veh-001')
   );
   const [staffStatus, setStaffStatus] = useState<'Assigned' | 'Pending'>(
     initialExpedition?.staffStatus || 'Assigned'
   );
 
-  // Auto-adjust companions when situation changes
+  // Reset / Clear Lead & Tourist Form Data
+  const handleClearAllData = () => {
+    setLeadName('');
+    setPassportNumber('');
+    setPassportExpiry('');
+    setNationality('');
+    setDateOfBirth('');
+    setGender('Male');
+    setOccupation('');
+    setEmail('');
+    setPhone('');
+    setDietary('');
+    setMedicalNotes('');
+    setGroupOrFamilyName('');
+    setEmergencyName('');
+    setEmergencyRelationship('');
+    setEmergencyPhone('');
+    setPassportDocName('');
+    setPassportDocUrl('');
+    setAvatar('');
+    setPassportVerified(false);
+    setScannedFileDetails(null);
+    setCompanions([]);
+    setSituation('Single');
+    setAutofilledFieldsCount(null);
+  };
+
+  // Auto-adjust companions when situation changes with clean blank templates
   const handleSituationChange = (newSit: TourSituation) => {
     setSituation(newSit);
     if (newSit === 'Single') {
@@ -456,22 +483,22 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
       setCompanions([]);
       setRoomsCount(1);
     } else if (newSit === 'Couple') {
-      // 1 companion if empty
+      // 1 blank companion slot if empty
       if (companions.length === 0) {
         setCompanions([
           {
             id: `comp-${Date.now()}`,
-            fullName: 'Eleanor Pendelton',
+            fullName: '',
             relationship: 'Spouse',
-            passportNumber: 'GB98234113',
-            passportExpiry: '2029-11-20',
-            nationality: nationality || 'British',
-            dateOfBirth: '1986-04-12',
+            passportNumber: '',
+            passportExpiry: '',
+            nationality: nationality || '',
+            dateOfBirth: '',
             gender: 'Female',
-            occupation: 'Curator & Historian',
-            dietaryRequirements: 'Vegetarian',
-            medicalNotes: 'No restrictions',
-            passportVerified: true,
+            occupation: '',
+            dietaryRequirements: '',
+            medicalNotes: '',
+            passportVerified: false,
           },
         ]);
       }
@@ -481,31 +508,31 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
         setCompanions([
           {
             id: `comp-${Date.now()}-1`,
-            fullName: 'Eleanor Pendelton',
+            fullName: '',
             relationship: 'Spouse',
-            passportNumber: 'GB98234113',
-            passportExpiry: '2029-11-20',
-            nationality: nationality || 'British',
-            dateOfBirth: '1986-04-12',
+            passportNumber: '',
+            passportExpiry: '',
+            nationality: nationality || '',
+            dateOfBirth: '',
             gender: 'Female',
-            occupation: 'Architect',
-            dietaryRequirements: 'None',
-            medicalNotes: 'None',
-            passportVerified: true,
+            occupation: '',
+            dietaryRequirements: '',
+            medicalNotes: '',
+            passportVerified: false,
           },
           {
             id: `comp-${Date.now()}-2`,
-            fullName: 'Oliver Pendelton',
+            fullName: '',
             relationship: 'Child',
-            passportNumber: 'GB98234114',
-            passportExpiry: '2029-05-10',
-            nationality: nationality || 'British',
-            dateOfBirth: '2014-08-22',
+            passportNumber: '',
+            passportExpiry: '',
+            nationality: nationality || '',
+            dateOfBirth: '',
             gender: 'Male',
-            occupation: 'Student',
-            dietaryRequirements: 'Nut allergy',
-            medicalNotes: 'Carries EpiPen',
-            passportVerified: true,
+            occupation: '',
+            dietaryRequirements: '',
+            medicalNotes: '',
+            passportVerified: false,
           },
         ]);
       }
@@ -515,31 +542,17 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
         setCompanions([
           {
             id: `comp-${Date.now()}-1`,
-            fullName: 'Prof. Markus Weber',
+            fullName: '',
             relationship: newSit === 'Delegation' ? 'Delegate' : 'Colleague',
-            passportNumber: 'DE44901238',
-            passportExpiry: '2030-02-14',
-            nationality: 'German',
-            dateOfBirth: '1978-03-29',
+            passportNumber: '',
+            passportExpiry: '',
+            nationality: nationality || '',
+            dateOfBirth: '',
             gender: 'Male',
-            occupation: 'Archaeologist',
-            dietaryRequirements: 'None',
-            medicalNotes: 'None',
-            passportVerified: true,
-          },
-          {
-            id: `comp-${Date.now()}-2`,
-            fullName: 'Dr. Clara Dubois',
-            relationship: newSit === 'Delegation' ? 'Delegate' : 'Colleague',
-            passportNumber: 'FR77218390',
-            passportExpiry: '2028-09-18',
-            nationality: 'French',
-            dateOfBirth: '1982-11-04',
-            gender: 'Female',
-            occupation: 'Botanist',
-            dietaryRequirements: 'Gluten-Free',
-            medicalNotes: 'None',
-            passportVerified: true,
+            occupation: '',
+            dietaryRequirements: '',
+            medicalNotes: '',
+            passportVerified: false,
           },
         ]);
       }
@@ -957,10 +970,10 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
 
   const nightsCount = calculateNights(checkIn, checkOut);
   const totalHotelUSD = nightsCount * roomsCount * pricePerNightUSD;
-  const currentSelectedHotel = hotels.find((h) => h.id === selectedHotelId) || hotels[0];
-  const currentSelectedGuide = employees.find((e) => e.id === assignedGuideId) || employees[0];
-  const currentSelectedDriver = employees.find((e) => e.id === assignedDriverId) || employees[3] || employees[1];
-  const currentSelectedVehicle = vehicles.find((v) => v.id === assignedVehicleId) || vehicles[0];
+  const currentSelectedHotel = (hotels && hotels.length > 0 ? (hotels.find((h) => h.id === selectedHotelId) || hotels[0]) : null);
+  const currentSelectedGuide = (employees && employees.length > 0 ? (employees.find((e) => e.id === assignedGuideId) || employees[0]) : null);
+  const currentSelectedDriver = (employees && employees.length > 0 ? (employees.find((e) => e.id === assignedDriverId) || employees[3] || employees[1] || employees[0]) : null);
+  const currentSelectedVehicle = (vehicles && vehicles.length > 0 ? (vehicles.find((v) => v.id === assignedVehicleId) || vehicles[0]) : null);
 
   const totalPartySize = 1 + companions.length;
 
@@ -1264,15 +1277,27 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                     </div>
                   </div>
 
-                  {scannedFileDetails && (
-                    <button
-                      type="button"
-                      onClick={handleClearScannedDocument}
-                      className="text-xs text-slate-500 hover:text-rose-600 font-semibold px-3 py-1 rounded-lg border border-slate-200 hover:border-rose-200 bg-white hover:bg-rose-50 transition cursor-pointer self-start sm:self-center shrink-0"
-                    >
-                      Clear / Reset Scan
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                    {(leadName || passportNumber || email || phone || scannedFileDetails) && (
+                      <button
+                        type="button"
+                        onClick={handleClearAllData}
+                        className="text-xs text-rose-600 hover:text-rose-700 font-bold px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Clear Form Data
+                      </button>
+                    )}
+                    {scannedFileDetails && (
+                      <button
+                        type="button"
+                        onClick={handleClearScannedDocument}
+                        className="text-xs text-slate-600 hover:text-slate-800 font-semibold px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        Reset Scan
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Upload & Dropzone Area */}
@@ -2382,15 +2407,15 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                       <Car className="w-4 h-4 text-amber-600" />
                       <h4 className="text-xs font-bold text-slate-900">Assigned 4WD Fleet Vehicle</h4>
                     </div>
-                    {totalPartySize > currentSelectedVehicle.capacity && (
+                    {currentSelectedVehicle && totalPartySize > (currentSelectedVehicle?.capacity || 5) && (
                       <span className="text-[10px] text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" /> Pax ({totalPartySize}) &gt; Cap ({currentSelectedVehicle.capacity})
+                        <AlertCircle className="w-3 h-3" /> Pax ({totalPartySize}) &gt; Cap ({currentSelectedVehicle?.capacity || 5})
                       </span>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    {vehicles.slice(0, 4).map((veh) => {
+                    {(vehicles || []).slice(0, 4).map((veh) => {
                       const isSelected = assignedVehicleId === veh.id;
                       return (
                         <button
@@ -2404,9 +2429,9 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                           }`}
                         >
                           <div>
-                            <div className="text-xs font-bold text-slate-900">{veh.model}</div>
+                            <div className="text-xs font-bold text-slate-900">{veh.model || veh.name || 'Vehicle'}</div>
                             <div className="text-[10px] text-slate-500 font-mono">
-                              Plate: {veh.plateNumber} · Cap: {veh.capacity} Pax · {veh.type}
+                              Plate: {veh.plateNumber || 'N/A'} · Cap: {veh.capacity ?? 5} Pax · {veh.type || '4WD'}
                             </div>
                           </div>
                           {isSelected && <span className="text-amber-700 text-xs font-bold">Selected ✓</span>}

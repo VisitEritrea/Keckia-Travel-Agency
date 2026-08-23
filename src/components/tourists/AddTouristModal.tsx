@@ -37,26 +37,49 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
   onClose,
   onAddTourist,
 }) => {
-  // Primary Tourist Fields
+  // Primary Tourist Fields (Initialized cleanly without pre-existing dummy data)
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [passportNumber, setPassportNumber] = useState('');
-  const [passportExpiry, setPassportExpiry] = useState('2030-12-31');
-  const [nationality, setNationality] = useState('United Kingdom');
-  const [dateOfBirth, setDateOfBirth] = useState('1988-05-15');
+  const [passportExpiry, setPassportExpiry] = useState('');
+  const [nationality, setNationality] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other' | 'Prefer not to say'>('Male');
   const [occupation, setOccupation] = useState('');
-  const [dietaryRequirements, setDietaryRequirements] = useState('Standard');
+  const [dietaryRequirements, setDietaryRequirements] = useState('');
   const [medicalNotes, setMedicalNotes] = useState('');
   const [insurancePolicyNumber, setInsurancePolicyNumber] = useState('');
   const [emergencyName, setEmergencyName] = useState('');
-  const [emergencyRelation, setEmergencyRelation] = useState('Spouse');
+  const [emergencyRelation, setEmergencyRelation] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [status, setStatus] = useState<'Active Traveler' | 'Inquiry' | 'VIP' | 'Flagged'>('Active Traveler');
   const [notes, setNotes] = useState('');
   const [preferredLanguage, setPreferredLanguage] = useState('English');
   const [avatar, setAvatar] = useState('');
+
+  // Clear / Reset Form Data
+  const handleClearForm = () => {
+    setFullName('');
+    setEmail('');
+    setPhone('');
+    setPassportNumber('');
+    setPassportExpiry('');
+    setNationality('');
+    setDateOfBirth('');
+    setGender('Male');
+    setOccupation('');
+    setDietaryRequirements('');
+    setMedicalNotes('');
+    setInsurancePolicyNumber('');
+    setEmergencyName('');
+    setEmergencyRelation('');
+    setEmergencyPhone('');
+    setNotes('');
+    setAvatar('');
+    setScannedFileDetails(null);
+    setAutofilledFieldsCount(null);
+  };
 
   // Document Scanner State
   const [isScanning, setIsScanning] = useState(false);
@@ -332,15 +355,26 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
                 </div>
               </div>
 
-              {scannedFileDetails && (
-                <button
-                  type="button"
-                  onClick={clearScannedDocument}
-                  className="text-xs text-slate-500 hover:text-rose-600 font-semibold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-rose-200 transition cursor-pointer"
-                >
-                  <RefreshCw className="w-3 h-3" /> Reset Scan
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {(fullName || passportNumber || email || phone || scannedFileDetails) && (
+                  <button
+                    type="button"
+                    onClick={handleClearForm}
+                    className="text-xs text-rose-600 hover:text-rose-700 font-bold px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 transition cursor-pointer"
+                  >
+                    Clear Form Data
+                  </button>
+                )}
+                {scannedFileDetails && (
+                  <button
+                    type="button"
+                    onClick={clearScannedDocument}
+                    className="text-xs text-slate-500 hover:text-rose-600 font-semibold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-rose-200 transition cursor-pointer"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Reset Scan
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Drag & Drop Upload Zone */}

@@ -15,7 +15,7 @@ import {
 import { NotificationItem } from '../../types';
 import { BRAND } from '../../../shared/brand';
 import { BrandMark } from '../brand/BrandLogo';
-import { ROLES, type RoleKey } from '../../../shared/roles';
+import { ROLES, getRoleDefinition, type RoleKey } from '../../../shared/roles';
 import { api, ApiError } from '../../lib/api';
 
 interface TopbarProps {
@@ -228,7 +228,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             <button
               onClick={() => setAccountOpen((open) => !open)}
               className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 transition cursor-pointer"
-              title={`${user.fullName} — ${ROLES[user.role].label}`}
+              title={`${user.fullName} — ${getRoleDefinition(user.role).label}`}
             >
               <span className="w-7 h-7 rounded-full bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">
                 {user.fullName.split(' ').map((part) => part[0]).slice(0, 2).join('')}
@@ -236,7 +236,7 @@ export const Topbar: React.FC<TopbarProps> = ({
               <span className="hidden lg:block text-left leading-tight">
                 <span className="block text-[11px] font-semibold text-slate-800">{user.fullName}</span>
                 <span className="block text-[9px] uppercase tracking-wider text-slate-500">
-                  {ROLES[user.role].label}
+                  {getRoleDefinition(user.role).label}
                 </span>
               </span>
             </button>
@@ -249,7 +249,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                     <div className="text-sm font-semibold text-slate-900">{user.fullName}</div>
                     <div className="text-xs text-slate-500">@{user.username}</div>
                     <div className="mt-2 text-[11px] leading-snug text-slate-500">
-                      {ROLES[user.role].description}
+                      {getRoleDefinition(user.role).description}
                     </div>
                   </div>
                   {onOpenAdmin && (

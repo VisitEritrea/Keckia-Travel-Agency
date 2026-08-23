@@ -1058,46 +1058,169 @@ export type TransactionCategory =
   | 'Transport & Fleet'
   | 'Staff Payroll'
   | 'Government Fees'
+  | 'Office & Utilities'
+  | 'Marketing & Promotion'
+  | 'Equipment & Supplies'
+  | 'Taxes & Bank Charges'
   | 'Miscellaneous'
   | 'Other';
 
 export type FinancialCategory = TransactionCategory;
 export type TicketRecord = Ticket;
 
-export type TransactionType = 'Income' | 'Expense';
+export type TransactionType = 'Income' | 'Expense' | 'Transfer' | 'Refund';
 
 export type PaymentMethod =
   | 'Credit Card'
   | 'Bank Wire'
   | 'Cash (USD)'
   | 'Cash (NFA)'
+  | 'Commercial Bank of Eritrea (CBE)'
+  | 'Telebirr / Mobile Money'
   | 'Traveler Cheque'
+  | 'Company Cheque'
   | 'Agent Ledger'
   | 'Mobile Money';
 
 export interface FinancialTransaction {
   id: string;
   date: string;
+  clearingDate?: string;
   referenceCode: string;
   category: TransactionCategory;
+  subCategory?: string;
   type: TransactionType;
   description: string;
   amountUSD: number;
   amountNFA: number;
+  currency?: 'USD' | 'ERN' | 'EUR' | 'GBP';
+  originalAmount?: number;
+  exchangeRate?: number;
   payerOrPayee: string;
+  payerPayeeType?: 'Client / Tourist' | 'Corporate Partner' | 'Hotel Vendor' | 'Airline / GDS' | 'Driver / Guide / Staff' | 'Gov Authority' | 'Fuel / Logistics Vendor' | 'Other';
+  payerPayeeContact?: string;
+  taxId?: string;
   paymentMethod: PaymentMethod;
+  bankAccount?: string;
+  taxRatePercent?: number;
+  taxAmountUSD?: number;
+  netAmountUSD?: number;
   status: 'Completed' | 'Pending' | 'Overdue' | 'Reconciled';
   linkedEntityId?: string;
-  linkedEntityType?: 'ticket' | 'booking' | 'hotel' | 'vehicle' | 'employee' | 'permit' | 'voa' | 'receipt';
+  linkedEntityType?: 'ticket' | 'booking' | 'hotel' | 'vehicle' | 'employee' | 'permit' | 'voa' | 'receipt' | 'payroll';
+  linkedEntityName?: string;
   receiptNumber?: string;
   receiptId?: string;
   receiptUrl?: string;
+  receiptAttachmentName?: string;
+  receiptAttachmentSize?: string;
   isVerified?: boolean;
   verifiedBy?: string;
   verifiedAt?: string;
-  taxId?: string;
+  authorizedBy?: string;
   notes?: string;
   recordedBy: string;
+}
+
+// ----------------------------------------------------
+// Staff Payroll & Compensation Engine Types
+// ----------------------------------------------------
+export type CompensationModel =
+  | 'permanent_salaried'
+  | 'sales_agent_monthly'
+  | 'sales_agent_commission'
+  | 'sales_agent_hybrid'
+  | 'tour_guide_daily'
+  | 'driver_daily';
+
+export interface ExpeditionWorkDetail {
+  tourScheduleId?: string;
+  tourTitle: string;
+  destination: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  roleOnTour: string;
+  dailyRateUSD: number;
+  perDiemUSD: number;
+  totalEarningsUSD: number;
+}
+
+export interface EmployeePayrollRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeRole: StaffRole | string;
+  avatar?: string;
+  departmentName: string;
+  compensationModel: CompensationModel;
+  bankName?: string;
+  bankAccountNumber?: string;
+  tinNumber?: string;
+  
+  // Permanent staff working days tracking
+  standardWorkingDays: number;
+  actualWorkingDays: number;
+  baseMonthlySalaryUSD: number;
+  dailyWorkingRateUSD: number;
+  workingDaysPayUSD: number;
+
+  // Tour Guide & Driver Tour Days tracking
+  tourDaysCount: number;
+  dailyTourRateUSD: number;
+  tourDaysPayUSD: number;
+  fieldPerDiemUSD: number;
+  fieldAllowanceTotalUSD: number;
+  expeditions: ExpeditionWorkDetail[];
+
+  // Sales Agent Commission tracking
+  salesToursRevenueUSD: number;
+  salesToursCommissionRatePercent: number;
+  salesToursCommissionUSD: number;
+  salesTicketsCount: number;
+  salesTicketCommissionPerTicketUSD: number;
+  salesTicketsCommissionUSD: number;
+  totalCommissionEarnedUSD: number;
+
+  // Allowances & Adjustments
+  allowancesUSD: number;
+  bonusUSD: number;
+  overtimeHours: number;
+  overtimePayUSD: number;
+  grossPayUSD: number;
+
+  // Deductions
+  taxDeductionUSD: number;
+  socialSecurityPensionUSD: number;
+  advanceOrLoanDeductionUSD: number;
+  otherDeductionsUSD: number;
+  totalDeductionsUSD: number;
+
+  // Net Pay
+  netPayUSD: number;
+  netPayERN: number;
+  disbursementMethod: 'Bank Transfer' | 'Cash (USD)' | 'Cash (ERN)' | 'Mobile Money';
+  disbursementStatus: 'Pending' | 'Approved' | 'Disbursed';
+  disbursedAt?: string;
+  notes?: string;
+}
+
+export interface PayrollRunPeriod {
+  id: string;
+  periodType: 'monthly' | 'weekly' | 'biweekly';
+  periodLabel: string;
+  month: string; // e.g. "2026-08"
+  startDate: string;
+  endDate: string;
+  records: EmployeePayrollRecord[];
+  totalGrossUSD: number;
+  totalDeductionsUSD: number;
+  totalNetUSD: number;
+  totalNetERN: number;
+  status: 'Draft' | 'Approved' | 'Disbursed';
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
 }
 
 export type ReceiptVerificationStatus = 'Verified' | 'Pending Review' | 'Flagged Discrepancy' | 'Unmatched';

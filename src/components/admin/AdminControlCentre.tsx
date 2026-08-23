@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useWorkspace } from '../../lib/workspace';
-import { ROLES, ADMIN_ROLE } from '../../../shared/roles';
+import { ROLES, ADMIN_ROLE, getRoleDefinition } from '../../../shared/roles';
 import { Badge, Banner, Button, Card, PageHeader, StatTile, Tabs } from '../ui/Kit';
 import { SystemSettingsPanel } from './SystemSettingsPanel';
 import { ImportPanel } from './ImportPanel';
@@ -136,7 +136,7 @@ export const AdminControlCentre: React.FC = () => {
               <h3 className="font-display text-lg font-bold text-slate-900">This area is for the administrator</h3>
               <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-slate-600">
                 Settings, importing, backups and clearing data all change the system for everyone, so they belong to the{' '}
-                {ROLES[ADMIN_ROLE].label} account. You are signed in as {ROLES[user.role].label}. Ask your administrator
+                {getRoleDefinition(ADMIN_ROLE).label} account. You are signed in as {getRoleDefinition(user.role).label}. Ask your administrator
                 if you need something changed here.
               </p>
             </div>

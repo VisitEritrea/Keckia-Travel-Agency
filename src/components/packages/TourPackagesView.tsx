@@ -263,17 +263,18 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
 
   // Filtered Expeditions
   const filteredExpeditions = useMemo(() => {
-    return expeditions.filter((exp) => {
+    return (expeditions || []).filter((exp) => {
+      if (!exp) return false;
       // Search
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchName = exp.leadName.toLowerCase().includes(q);
-        const matchPassport = exp.passportNumber.toLowerCase().includes(q);
-        const matchHotel = exp.hotelName.toLowerCase().includes(q);
-        const matchGuide = exp.guideName.toLowerCase().includes(q);
-        const matchDriver = exp.driverName.toLowerCase().includes(q);
-        const matchRoute = exp.routeSummary.toLowerCase().includes(q);
-        const matchParty = exp.partyTitle?.toLowerCase().includes(q);
+        const matchName = (exp.leadName || '').toLowerCase().includes(q);
+        const matchPassport = (exp.passportNumber || '').toLowerCase().includes(q);
+        const matchHotel = (exp.hotelName || '').toLowerCase().includes(q);
+        const matchGuide = (exp.guideName || '').toLowerCase().includes(q);
+        const matchDriver = (exp.driverName || '').toLowerCase().includes(q);
+        const matchRoute = (exp.routeSummary || '').toLowerCase().includes(q);
+        const matchParty = (exp.partyTitle || '').toLowerCase().includes(q);
         if (!matchName && !matchPassport && !matchHotel && !matchGuide && !matchDriver && !matchRoute && !matchParty) {
           return false;
         }
@@ -806,15 +807,15 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
                   <div className="px-6 pb-6 pt-0 border-t border-slate-100 bg-slate-50/50 space-y-4 animate-fadeIn">
                     <div className="pt-4 flex items-center justify-between">
                       <h4 className="text-xs font-mono font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                        <span>🗓️</span> Detailed Day-by-Day Expedition Itinerary ({exp.schedule.length} Days)
+                        <span>🗓️</span> Detailed Day-by-Day Expedition Itinerary ({(exp.schedule || []).length} Days)
                       </h4>
                       <span className="text-[11px] text-slate-500 font-mono">
-                        Route: {exp.routeSummary}
+                        Route: {exp.routeSummary || 'Custom Expedition Route'}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {exp.schedule.map((day) => (
+                      {(exp.schedule || []).map((day) => (
                         <div
                           key={day.dayNumber}
                           className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2"

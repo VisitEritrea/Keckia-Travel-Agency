@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { KeyRound, Loader2, Plus, ShieldCheck, UserCog, UserX } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
-import { ROLES, ROLE_KEYS, type RoleKey } from '../../../shared/roles';
+import { ROLES, ROLE_KEYS, getRoleDefinition, type RoleKey } from '../../../shared/roles';
 
 interface StaffAccount {
   id: number;
@@ -138,13 +138,13 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
               >
                 {ROLE_KEYS.map((key) => (
                   <option key={key} value={key}>
-                    {ROLES[key].label}
+                    {getRoleDefinition(key).label}
                   </option>
                 ))}
               </select>
             </label>
           </div>
-          <p className="mt-3 text-xs text-slate-500">{ROLES[draft.role].description}</p>
+          <p className="mt-3 text-xs text-slate-500">{getRoleDefinition(draft.role).description}</p>
           <div className="mt-5 flex gap-3">
             <button
               type="submit"
@@ -200,7 +200,7 @@ export const StaffAccountsView: React.FC<{ currentUserId: number }> = ({ current
                       >
                         {ROLE_KEYS.map((key) => (
                           <option key={key} value={key}>
-                            {ROLES[key].label}
+                            {getRoleDefinition(key).label}
                           </option>
                         ))}
                       </select>

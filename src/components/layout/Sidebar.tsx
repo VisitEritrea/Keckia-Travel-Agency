@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard,
   Users2,
@@ -18,7 +18,7 @@ import {
 import { ActiveTab } from '../../types';
 import { BRAND } from '../../../shared/brand';
 import { BrandLockup } from '../brand/BrandLogo';
-import { ROLES, canView, type ModuleKey, type RoleKey } from '../../../shared/roles';
+import { ROLES, canView, getRoleDefinition, type ModuleKey, type RoleKey } from '../../../shared/roles';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -44,6 +44,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   role,
   redFlagCount = 0,
 }) => {
+  const [roleVersion, setRoleVersion] = useState(0);
+
+  useEffect(() => {
+    const handleRoleUpdate = () => {
+      setRoleVersion((v) => v + 1);
+    };
+    window.addEventListener('roles_updated', handleRoleUpdate);
+    window.addEventListener('storage', handleRoleUpdate);
+    return () => {
+      window.removeEventListener('roles_updated', handleRoleUpdate);
+      window.removeEventListener('storage', handleRoleUpdate);
+    };
+  }, []);
+
   const navItems: NavItem[] = [
     { id: 'dashboard', module: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null, group: 'Operations' },
     { id: 'packages', module: 'packages', label: 'Tour Operations', icon: Layers, badge: null, group: 'Operations' },
@@ -74,8 +88,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'admin', module: 'admin', label: 'Admin & Setup', icon: SlidersHorizontal, badge: null, group: 'Control' },
   ];
 
-  const visible = navItems.filter((item) => canView(role, item.module));
+  const visible = useMemo(() => {
+    return navItems.filter((item) => canView(role, item.module));
+  }, [role, roleVersion]);
+
   const groups: Array<NavItem['group']> = ['Operations', 'Commercial', 'Control'];
+  const activeRoleDef = getRoleDefinition(role);
 
   return (
     <aside className="w-64 border-r border-slate-200 bg-white flex flex-col shrink-0 text-slate-800 select-none z-30 shadow-xs">
@@ -141,8 +159,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Role footer */}
       <div className="p-4 border-t border-slate-100 bg-slate-50/60">
         <div className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Signed in as</div>
-        <div className="mt-1 text-sm font-semibold text-slate-800">{ROLES[role].label}</div>
-        <p className="mt-1 text-[11px] leading-snug text-slate-500">{ROLES[role].description}</p>
+        <div className="mt-1 text-sm font-semibold text-slate-800">{activeRoleDef.label}</div>
+        <p className="mt-1 text-[11px] leading-snug text-slate-500">{activeRoleDef.description}</p>
       </div>
     </aside>
   );

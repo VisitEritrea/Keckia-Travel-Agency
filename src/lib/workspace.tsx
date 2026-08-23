@@ -13,6 +13,8 @@ import {
   canEditRecord,
   canDeleteRecord,
   isAdmin,
+  canWrite,
+  ROLES,
   type RoleKey,
 } from "../../shared/roles";
 
@@ -282,22 +284,36 @@ export const WorkspaceProvider: React.FC<{
     return () => clearTimeout(timer);
   }, [collections, flush]);
 
+  const [rolesVersion, setRolesVersion] = useState(0);
+
+  useEffect(() => {
+    const handleRolesUpdated = () => {
+      setRolesVersion((v) => v + 1);
+    };
+    window.addEventListener('roles_updated', handleRolesUpdated);
+    return () => window.removeEventListener('roles_updated', handleRolesUpdated);
+  }, []);
+
   const value = useMemo<WorkspaceContextValue>(
-    () => ({
-      user,
-      collections: collections || {},
-      readable: bootstrap?.readable || [],
-      setCollection,
-      canEditRecords: isAdmin(user.role),
-      status,
-      lastError,
-      dismissError: () => {
-        setLastError(null);
-        setStatus("idle");
-      },
-      reload,
-    }),
-    [user, collections, bootstrap?.readable, setCollection, status, lastError, reload],
+    () => {
+      const roleDef = ROLES[user.role];
+      const hasWriteAccess = isAdmin(user.role) || (roleDef?.write && roleDef.write.length > 0);
+      return {
+        user,
+        collections: collections || {},
+        readable: bootstrap?.readable || [],
+        setCollection,
+        canEditRecords: Boolean(hasWriteAccess),
+        status,
+        lastError,
+        dismissError: () => {
+          setLastError(null);
+          setStatus("idle");
+        },
+        reload,
+      };
+    },
+    [user, collections, bootstrap?.readable, setCollection, status, lastError, reload, rolesVersion],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

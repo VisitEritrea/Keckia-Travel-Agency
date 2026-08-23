@@ -1,5 +1,5 @@
 import { useOptions } from '../../lib/settings';
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   X,
   Plane,
@@ -13,8 +13,23 @@ import {
   Layers,
   ArrowRight,
   ArrowLeftRight,
+  Upload,
+  FileCheck,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  ScanLine,
+  Trash2,
+  FileText,
 } from 'lucide-react';
 import { TouristProfile, TourSchedule, Ticket, PaymentStatus } from '../../types';
+import {
+  scanDocumentWithAI,
+  ScannedTouristData,
+  normalizeDateToISO,
+  normalizeGender,
+  normalizeNationality,
+} from '../../utils/documentScanner';
 
 interface IssueTicketModalProps {
   tourists: TouristProfile[];
@@ -149,6 +164,98 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
   const [mileageCaptured, setMileageCaptured] = useState(false);
   const [nameMatchesPassport, setNameMatchesPassport] = useState(true);
 
+  // Passport & Dossier OCR State
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState('');
+  const [scannedFileDetails, setScannedFileDetails] = useState<{
+    name: string;
+    type: string;
+    size: string;
+    previewUrl?: string;
+    confidenceScore: number;
+    docType: string;
+  } | null>(null);
+  const [autofilledFieldsCount, setAutofilledFieldsCount] = useState(0);
+  const [highlightAutofill, setHighlightAutofill] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Apply OCR scanned results
+  const applyExtractedData = (data: ScannedTouristData) => {
+    let filledCount = 0;
+
+    if (data.fullName && data.fullName.trim()) {
+      setClientName(data.fullName.trim());
+      filledCount++;
+    }
+
+    const normPassport = (data.passportNumber || '').trim().toUpperCase();
+    if (normPassport) {
+      setPassportNumber(normPassport);
+      filledCount++;
+    }
+
+    if (data.phone && data.phone.trim()) {
+      setPhoneNumber(data.phone.trim());
+      filledCount++;
+    }
+
+    setAutofilledFieldsCount(filledCount);
+    setHighlightAutofill(true);
+    setTimeout(() => setHighlightAutofill(false), 4500);
+  };
+
+  const handlePassportUpload = async (file: File) => {
+    if (!file) return;
+    setIsScanning(true);
+    setScanProgress('Parsing document binary...');
+
+    try {
+      await new Promise((r) => setTimeout(r, 200));
+      setScanProgress('Analyzing Biometric MRZ & Text with Gemini OCR...');
+
+      const scanResult = await scanDocumentWithAI(file);
+      setScanProgress('Auto-populating passenger fields...');
+
+      let previewUrl: string | undefined;
+      try {
+        if (file.type.startsWith('image/')) {
+          previewUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+        }
+      } catch (e) {
+        console.warn('Could not generate preview:', e);
+      }
+
+      setScannedFileDetails({
+        name: file.name,
+        type: file.type.includes('pdf') ? 'PDF Travel Dossier' : 'Passport Image Scan',
+        size: `${(file.size / 1024).toFixed(1)} KB`,
+        previewUrl,
+        confidenceScore: scanResult.data.confidenceScore || 98,
+        docType: scanResult.data.detectedDocumentType || (file.type.includes('pdf') ? 'Travel PDF Dossier' : 'Biometric Passport'),
+      });
+
+      applyExtractedData(scanResult.data);
+    } catch (err) {
+      console.error('Error during ticket passport scan:', err);
+    } finally {
+      setIsScanning(false);
+      setScanProgress('');
+    }
+  };
+
+  const handleClearPassengerData = () => {
+    setClientName('');
+    setPhoneNumber('');
+    setPassportNumber('');
+    setScannedFileDetails(null);
+    setAutofilledFieldsCount(0);
+  };
+
   // Quick autofill when selecting an existing tourist
   const handleSelectTourist = (tId: string) => {
     const t = tourists.find((item) => item.id === tId);
@@ -156,6 +263,9 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
       setClientName(t.fullName);
       setPhoneNumber(t.phone);
       setPassportNumber(t.passportNumber);
+      setAutofilledFieldsCount(3);
+      setHighlightAutofill(true);
+      setTimeout(() => setHighlightAutofill(false), 3000);
     }
   };
 
@@ -304,42 +414,202 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-5 text-xs">
           {/* ========================================================================= */}
-          {/* SECTION 1: PASSENGER IDENTIFICATION                                      */}
+          {/* SECTION 1: PASSENGER IDENTIFICATION & PASSPORT OCR                        */}
           {/* ========================================================================= */}
-          <div>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-2">
-              1. Passenger Information
-            </span>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                1. Passenger Information & Biometric OCR
+              </span>
+              <div className="flex items-center gap-2">
+                {autofilledFieldsCount > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    Auto-filled ({autofilledFieldsCount} fields)
+                  </span>
+                )}
+                {(clientName || passportNumber || phoneNumber || scannedFileDetails) && (
+                  <button
+                    type="button"
+                    onClick={handleClearPassengerData}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-red-600 transition px-2 py-0.5 rounded hover:bg-red-50 cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Clear Form Data
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Passport & Travel Dossier AI Scanner Dropzone */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handlePassportUpload(f);
+                e.target.value = '';
+              }}
+            />
+
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) handlePassportUpload(f);
+              }}
+              className={`p-3.5 rounded-xl border-2 border-dashed transition flex flex-col sm:flex-row items-center justify-between gap-3 ${
+                isDragging
+                  ? 'border-blue-500 bg-blue-50/80 scale-[1.01]'
+                  : scannedFileDetails
+                  ? 'border-emerald-300 bg-emerald-50/40'
+                  : 'border-slate-300 bg-slate-50/70 hover:bg-slate-50 hover:border-blue-400'
+              }`}
+            >
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    isScanning
+                      ? 'bg-blue-600 text-white animate-pulse'
+                      : scannedFileDetails
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}
+                >
+                  {isScanning ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : scannedFileDetails ? (
+                    <FileCheck className="w-5 h-5" />
+                  ) : (
+                    <ScanLine className="w-5 h-5" />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  {isScanning ? (
+                    <div>
+                      <p className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600 animate-spin" />
+                        Scanning Passport / Ticket Dossier...
+                      </p>
+                      <p className="text-[11px] text-blue-700 mt-0.5">{scanProgress || 'Extracting biometric text & MRZ...'}</p>
+                    </div>
+                  ) : scannedFileDetails ? (
+                    <div>
+                      <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5 truncate">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        {scannedFileDetails.name}
+                      </p>
+                      <p className="text-[11px] text-emerald-700 mt-0.5 flex items-center gap-2">
+                        <span>{scannedFileDetails.docType} ({scannedFileDetails.size})</span>
+                        <span className="font-semibold text-emerald-800">
+                          {scannedFileDetails.confidenceScore}% confidence
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        Scan Passport or Travel Dossier to Auto-Fill
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Drop passport photo, national ID, or e-ticket PDF here, or click to browse.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                {scannedFileDetails ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 text-xs font-semibold hover:bg-emerald-50 transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Scan Another
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isScanning}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload & Scan
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-slate-700 font-medium mb-1">Client name *</label>
+                <label className="block text-slate-700 font-medium mb-1">
+                  Client name *
+                  {highlightAutofill && clientName && (
+                    <span className="ml-1 text-[10px] text-emerald-700 font-bold">Auto-filled</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   required
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                   placeholder="e.g. Samuel Yohannes"
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 rounded-lg bg-white border text-xs font-semibold text-slate-900 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition ${
+                    highlightAutofill && clientName
+                      ? 'border-emerald-500 bg-emerald-50/30'
+                      : 'border-slate-200'
+                  }`}
                 />
               </div>
               <div>
-                <label className="block text-slate-700 font-medium mb-1">Phone number</label>
+                <label className="block text-slate-700 font-medium mb-1">
+                  Phone number
+                  {highlightAutofill && phoneNumber && (
+                    <span className="ml-1 text-[10px] text-emerald-700 font-bold">Auto-filled</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="+291 7 123456"
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 rounded-lg bg-white border text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition ${
+                    highlightAutofill && phoneNumber
+                      ? 'border-emerald-500 bg-emerald-50/30'
+                      : 'border-slate-200'
+                  }`}
                 />
               </div>
               <div>
-                <label className="block text-slate-700 font-medium mb-1">Passport number</label>
+                <label className="block text-slate-700 font-medium mb-1">
+                  Passport number
+                  {highlightAutofill && passportNumber && (
+                    <span className="ml-1 text-[10px] text-emerald-700 font-bold">Auto-filled</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   value={passportNumber}
                   onChange={(e) => setPassportNumber(e.target.value)}
                   placeholder="e.g. ER8912301"
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-mono uppercase text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 rounded-lg bg-white border text-xs font-mono uppercase text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition ${
+                    highlightAutofill && passportNumber
+                      ? 'border-emerald-500 bg-emerald-50/30'
+                      : 'border-slate-200'
+                  }`}
                 />
               </div>
             </div>

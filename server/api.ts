@@ -1507,6 +1507,51 @@ Return one line per day in the form "Day N | Title | Location | Description".`;
     return fail(405, "Method not allowed.");
   }
 
+  /* ---------------- roles & permissions ---------------- */
+  if (head === "roles") {
+    if (req.method === "GET") {
+      return ok({ roles: ROLES });
+    }
+
+    if (req.method === "POST" || req.method === "PUT") {
+      if (!isAdmin(user.role) && !ROLES[user.role]?.can?.manageAccounts) {
+        return fail(403, "Only the CEO or administrators can modify role security policies.");
+      }
+      const roleData = req.body;
+      if (!roleData || !roleData.key) return fail(400, "Role key and definition are required.");
+
+      ROLES[roleData.key] = {
+        label: roleData.label || roleData.key,
+        description: roleData.description || '',
+        view: Array.isArray(roleData.view) ? roleData.view : [],
+        write: Array.isArray(roleData.write) ? roleData.write : [],
+        ownRecordsOnly: Boolean(roleData.ownRecordsOnly),
+        can: {
+          issueTicket: Boolean(roleData.can?.issueTicket),
+          recordPayment: Boolean(roleData.can?.recordPayment),
+          approveIssue: Boolean(roleData.can?.approveIssue),
+          manageAccounts: Boolean(roleData.can?.manageAccounts),
+          viewAllBookings: Boolean(roleData.can?.viewAllBookings),
+          exportReports: Boolean(roleData.can?.exportReports),
+        },
+      };
+
+      await audit({
+        actor: user.username,
+        actorRole: user.role,
+        action: "update",
+        collection: "audit",
+        recordId: roleData.key,
+        summary: `Updated role security policy & permissions for "${roleData.label || roleData.key}" (${roleData.key}).`,
+        severity: "warning",
+      });
+
+      return ok({ ok: true, role: ROLES[roleData.key] });
+    }
+
+    return fail(405, "Method not allowed.");
+  }
+
   /* ---------------- administrator data tools ---------------- */
   if (head === "admin") {
     return handleAdmin(user, req, rest);

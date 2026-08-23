@@ -487,14 +487,26 @@ export const AddTicketingClientModal: React.FC<AddTicketingClientModalProps> = (
                   </div>
                 </div>
 
-                {ocrSuccess && (
-                  <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-semibold animate-in fade-in">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>
-                      {autofilledFieldsCount} fields auto-filled ({ocrConfidence}% MRZ confidence)
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {(fullName || passportNumber || email || phone || passportDocumentName) && (
+                    <button
+                      type="button"
+                      onClick={handleResetForm}
+                      className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold hover:bg-rose-500/30 transition cursor-pointer flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Clear Form Data
+                    </button>
+                  )}
+                  {ocrSuccess && (
+                    <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-3 py-1.5 rounded-xl text-xs font-semibold animate-in fade-in">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>
+                        {autofilledFieldsCount} fields auto-filled ({ocrConfidence}% MRZ confidence)
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Upload Drop Zone */}

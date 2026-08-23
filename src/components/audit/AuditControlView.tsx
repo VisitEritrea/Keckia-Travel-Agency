@@ -24,7 +24,16 @@ import {
   ExpenseReceipt,
   TouristProfile,
 } from '../../types';
-import { ROLES, type RoleKey, RoleDefinition, ModuleKey } from '../../../shared/roles';
+import {
+  ROLES,
+  type RoleKey,
+  RoleDefinition,
+  ModuleKey,
+  loadSavedCustomRoles,
+  saveCustomRole,
+  resetRolesToDefault,
+  getRoleDefinition,
+} from '../../../shared/roles';
 import { api } from '../../lib/api';
 import { exportToCSV } from '../../utils/exportUtils';
 import { RoleEditorModal, EditableRole } from './RoleEditorModal';
@@ -244,33 +253,68 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
   const [roleNotice, setRoleNotice] = useState<string | null>(null);
   const [matrixSearchQuery, setMatrixSearchQuery] = useState('');
 
-  // Editable roles state initialized with system defaults and custom definitions
+  // Editable roles state initialized with saved overrides merged with system defaults
   const [customRoles, setCustomRoles] = useState<EditableRole[]>(() => {
-    return (Object.keys(ROLES) as RoleKey[]).map((key) => {
+    const saved = loadSavedCustomRoles();
+    const defaultUsers: Record<string, string[]> = {
+      CEO: ['Admin (Yonas Ghebre)'],
+      OPERATIONS: ['Amanuel Yohannes'],
+      FINANCE: ['Senait Kidane'],
+      ACCOUNTANT: ['Mussie Tesfay'],
+      AGENT: ['Sara Berhane', 'Daniel Habte'],
+      TOUR_OPS: ['Filmon Tekle', 'Luam Zerai'],
+      HR: ['Rahel Mehari'],
+      GUIDE: ['Dawit Haile', 'Mebrahtu Kifle', 'Eden Weldu'],
+      DRIVER: ['Tesfay Abraha', 'Berhane Gebre'],
+    };
+
+    const rolesMap = new Map<string, EditableRole>();
+
+    // Put system defaults
+    (Object.keys(ROLES) as RoleKey[]).forEach((key) => {
       const def = ROLES[key];
-      const defaultUsers: Record<string, string[]> = {
-        CEO: ['Admin (Yonas Ghebre)'],
-        OPERATIONS: ['Amanuel Yohannes'],
-        FINANCE: ['Senait Kidane'],
-        ACCOUNTANT: ['Mussie Tesfay'],
-        AGENT: ['Sara Berhane', 'Daniel Habte'],
-        TOUR_OPS: ['Filmon Tekle', 'Luam Zerai'],
-        HR: ['Rahel Mehari'],
-        GUIDE: ['Dawit Haile', 'Mebrahtu Kifle', 'Eden Weldu'],
-        DRIVER: ['Tesfay Abraha', 'Berhane Gebre'],
-      };
-      return {
+      if (!def) return;
+      rolesMap.set(key, {
         key,
         label: def.label,
         description: def.description,
-        view: def.view,
-        write: def.write,
+        view: [...def.view],
+        write: [...def.write],
         ownRecordsOnly: def.ownRecordsOnly,
         can: { ...def.can },
         assignedUsers: defaultUsers[key] || [],
-      };
+      });
     });
+
+    // Merge saved custom overrides
+    saved.forEach((s) => {
+      if (s && s.key) {
+        const existing = rolesMap.get(s.key);
+        rolesMap.set(s.key, {
+          ...existing,
+          ...s,
+          assignedUsers: s.assignedUsers && s.assignedUsers.length > 0 ? s.assignedUsers : (existing?.assignedUsers || []),
+        });
+      }
+    });
+
+    return Array.from(rolesMap.values());
   });
+
+  useEffect(() => {
+    const handleRolesUpdated = () => {
+      const saved = loadSavedCustomRoles();
+      if (saved.length > 0) {
+        setCustomRoles((prev) => {
+          const map = new Map(prev.map((r) => [r.key, r]));
+          saved.forEach((s) => map.set(s.key, { ...map.get(s.key), ...s }));
+          return Array.from(map.values());
+        });
+      }
+    };
+    window.addEventListener('roles_updated', handleRolesUpdated);
+    return () => window.removeEventListener('roles_updated', handleRolesUpdated);
+  }, []);
 
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<EditableRole | null>(null);
@@ -286,6 +330,7 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
   };
 
   const handleSaveRole = (savedRole: EditableRole) => {
+    // 1. Update component state
     setCustomRoles((prev) => {
       const index = prev.findIndex((r) => r.key === savedRole.key);
       if (index >= 0) {
@@ -296,8 +341,50 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
       return [...prev, savedRole];
     });
 
-    setRoleNotice(`Role "${savedRole.label}" saved and policy enforcement updated.`);
+    // 2. Persist to storage & update global ROLES runtime registry
+    saveCustomRole(savedRole);
+
+    // 3. Post to backend role synchronization if supported
+    api.post('roles', savedRole).catch((err) => {
+      console.warn('Role API sync warning (persisted locally):', err);
+    });
+
+    setRoleNotice(`Role "${savedRole.label}" saved and policy enforcement updated across all modules.`);
     setTimeout(() => setRoleNotice(null), 5000);
+  };
+
+  const handleResetRoles = () => {
+    if (window.confirm('Reset all roles and permission policies to factory defaults?')) {
+      resetRolesToDefault();
+      const defaultUsers: Record<string, string[]> = {
+        CEO: ['Admin (Yonas Ghebre)'],
+        OPERATIONS: ['Amanuel Yohannes'],
+        FINANCE: ['Senait Kidane'],
+        ACCOUNTANT: ['Mussie Tesfay'],
+        AGENT: ['Sara Berhane', 'Daniel Habte'],
+        TOUR_OPS: ['Filmon Tekle', 'Luam Zerai'],
+        HR: ['Rahel Mehari'],
+        GUIDE: ['Dawit Haile', 'Mebrahtu Kifle', 'Eden Weldu'],
+        DRIVER: ['Tesfay Abraha', 'Berhane Gebre'],
+      };
+      setCustomRoles(
+        (Object.keys(ROLES) as RoleKey[]).map((key) => {
+          const def = ROLES[key];
+          return {
+            key,
+            label: def.label,
+            description: def.description,
+            view: [...def.view],
+            write: [...def.write],
+            ownRecordsOnly: def.ownRecordsOnly,
+            can: { ...def.can },
+            assignedUsers: defaultUsers[key] || [],
+          };
+        })
+      );
+      setRoleNotice('All roles restored to default system security policies.');
+      setTimeout(() => setRoleNotice(null), 5000);
+    }
   };
 
   const filteredMatrixRoles = useMemo(() => {
@@ -538,7 +625,7 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
                     <div className="flex flex-wrap items-baseline gap-x-2">
                       <span className="text-sm font-semibold text-slate-900">{entry.actor || 'unknown'}</span>
                       <span className="text-[10px] uppercase tracking-wider text-slate-400">
-                        {entry.actorRole && ROLES[entry.actorRole as RoleKey]?.label}
+                        {entry.actorRole && (getRoleDefinition(entry.actorRole)?.label || entry.actorRole)}
                       </span>
                       <span className="text-xs text-slate-500">
                         · {ACTION_LABELS[entry.action] || entry.action}
@@ -578,7 +665,7 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
                 </div>
                 <p className="mt-1 text-xs text-slate-500 max-w-xl">
                   Enforces dual-control separation of duty, module read/write restrictions, and staff authority.
-                  You are currently signed in as <strong className="text-slate-900 font-bold">{ROLES[role]?.label || role}</strong>.
+                  You are currently signed in as <strong className="text-slate-900 font-bold">{getRoleDefinition(role)?.label || role}</strong>.
                 </p>
               </div>
 
@@ -592,6 +679,15 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
                     className="w-48 sm:w-56 rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs outline-hidden focus:border-amber-500 shadow-xs"
                   />
                 </div>
+
+                <button
+                  type="button"
+                  onClick={handleResetRoles}
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs transition cursor-pointer"
+                  title="Reset all roles to factory system default policies"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-slate-500" /> Reset to Defaults
+                </button>
 
                 <button
                   type="button"

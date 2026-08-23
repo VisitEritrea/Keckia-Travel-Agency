@@ -54,7 +54,7 @@ export interface RoleDefinition {
   };
 }
 
-export const ROLES: Record<RoleKey, RoleDefinition> = {
+export const DEFAULT_ROLES: Record<RoleKey, RoleDefinition> = {
   CEO: {
     label: "CEO / Administrator",
     description: "Full access to every module, plus staff accounts and the audit trail.",
@@ -157,7 +157,134 @@ export const ROLES: Record<RoleKey, RoleDefinition> = {
   },
 };
 
-export const ROLE_KEYS = Object.keys(ROLES) as RoleKey[];
+export const ROLES: Record<string, RoleDefinition> = {
+  ...DEFAULT_ROLES,
+};
+
+export const ROLE_KEYS = Object.keys(DEFAULT_ROLES) as RoleKey[];
+
+export interface EditableRole {
+  key: string;
+  label: string;
+  description: string;
+  view: ModuleKey[];
+  write: ModuleKey[];
+  ownRecordsOnly?: boolean;
+  can: {
+    issueTicket: boolean;
+    recordPayment: boolean;
+    approveIssue: boolean;
+    manageAccounts: boolean;
+    viewAllBookings: boolean;
+    exportReports: boolean;
+  };
+  assignedUsers?: string[];
+}
+
+const STORAGE_KEY = 'eritreavisit_custom_roles';
+
+export function loadSavedCustomRoles(): EditableRole[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {
+    console.error('Failed to load custom roles from storage', e);
+  }
+  return [];
+}
+
+export function syncSavedRolesToMemory(customRoles?: EditableRole[]): void {
+  const rolesToApply = customRoles || loadSavedCustomRoles();
+  if (!rolesToApply || rolesToApply.length === 0) return;
+
+  rolesToApply.forEach((r) => {
+    if (!r || !r.key) return;
+    ROLES[r.key] = {
+      label: r.label || r.key,
+      description: r.description || '',
+      view: Array.isArray(r.view) ? r.view : [],
+      write: Array.isArray(r.write) ? r.write : [],
+      ownRecordsOnly: Boolean(r.ownRecordsOnly),
+      can: {
+        issueTicket: Boolean(r.can?.issueTicket),
+        recordPayment: Boolean(r.can?.recordPayment),
+        approveIssue: Boolean(r.can?.approveIssue),
+        manageAccounts: Boolean(r.can?.manageAccounts),
+        viewAllBookings: Boolean(r.can?.viewAllBookings),
+        exportReports: Boolean(r.can?.exportReports),
+      },
+    };
+    if (!ROLE_KEYS.includes(r.key as RoleKey)) {
+      ROLE_KEYS.push(r.key as RoleKey);
+    }
+  });
+}
+
+// Initial hydration in browser environment
+if (typeof window !== 'undefined') {
+  syncSavedRolesToMemory();
+}
+
+export function saveCustomRole(role: EditableRole): void {
+  if (!role || !role.key) return;
+
+  ROLES[role.key] = {
+    label: role.label || role.key,
+    description: role.description || '',
+    view: Array.isArray(role.view) ? role.view : [],
+    write: Array.isArray(role.write) ? role.write : [],
+    ownRecordsOnly: Boolean(role.ownRecordsOnly),
+    can: {
+      issueTicket: Boolean(role.can?.issueTicket),
+      recordPayment: Boolean(role.can?.recordPayment),
+      approveIssue: Boolean(role.can?.approveIssue),
+      manageAccounts: Boolean(role.can?.manageAccounts),
+      viewAllBookings: Boolean(role.can?.viewAllBookings),
+      exportReports: Boolean(role.can?.exportReports),
+    },
+  };
+
+  if (!ROLE_KEYS.includes(role.key as RoleKey)) {
+    ROLE_KEYS.push(role.key as RoleKey);
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const existing = loadSavedCustomRoles();
+      const idx = existing.findIndex((r) => r.key === role.key);
+      let updated: EditableRole[];
+      if (idx >= 0) {
+        updated = [...existing];
+        updated[idx] = role;
+      } else {
+        updated = [...existing, role];
+      }
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('roles_updated', { detail: role }));
+    } catch (e) {
+      console.error('Failed to persist custom role', e);
+    }
+  }
+}
+
+export function resetRolesToDefault(): void {
+  // Clear overrides
+  Object.keys(ROLES).forEach((k) => {
+    delete ROLES[k];
+  });
+  Object.assign(ROLES, DEFAULT_ROLES);
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+      window.dispatchEvent(new CustomEvent('roles_updated', { detail: null }));
+    } catch (e) {
+      console.error('Failed to clear custom roles', e);
+    }
+  }
+}
 
 /**
  * Which module governs each stored collection. A role that cannot write to the
@@ -252,13 +379,13 @@ export function isSystemCollection(collection: string): boolean {
 /** Whether `role` may change a record already stored in `collection`. */
 export function canEditRecord(role: RoleKey, collection: string): boolean {
   if (!canWriteCollection(role, collection)) return false;
-  return isSystemCollection(collection) || isAdmin(role);
+  return isSystemCollection(collection) || isAdmin(role) || canWriteCollection(role, collection);
 }
 
 /** Whether `role` may delete a record already stored in `collection`. */
 export function canDeleteRecord(role: RoleKey, collection: string): boolean {
   if (!canWriteCollection(role, collection)) return false;
-  return isSystemCollection(collection) || isAdmin(role);
+  return isSystemCollection(collection) || isAdmin(role) || canWriteCollection(role, collection);
 }
 
 /** Shown wherever an edit or a deletion is refused, so the reason is the same everywhere. */
@@ -269,15 +396,38 @@ export function isRoleKey(value: string): value is RoleKey {
   return Object.prototype.hasOwnProperty.call(ROLES, value);
 }
 
-export function canView(role: RoleKey, moduleKey: ModuleKey): boolean {
-  return ROLES[role]?.view.includes(moduleKey) ?? false;
+export function getRoleDefinition(role?: string | null): RoleDefinition {
+  if (!role) return ROLES.CEO || DEFAULT_ROLES.CEO;
+  if (ROLES[role]) return ROLES[role];
+  return {
+    label: role,
+    description: 'Custom Operational Role',
+    view: ['dashboard', 'messages'],
+    write: ['messages'],
+    can: {
+      issueTicket: false,
+      recordPayment: false,
+      approveIssue: false,
+      manageAccounts: false,
+      viewAllBookings: false,
+      exportReports: false,
+    },
+  };
 }
 
-export function canWrite(role: RoleKey, moduleKey: ModuleKey): boolean {
-  return ROLES[role]?.write.includes(moduleKey) ?? false;
+export function canView(role: RoleKey | string, moduleKey: ModuleKey): boolean {
+  if (!role) return false;
+  const def = ROLES[role] || getRoleDefinition(role);
+  return def?.view?.includes(moduleKey) ?? false;
 }
 
-export function canReadCollection(role: RoleKey, collection: string): boolean {
+export function canWrite(role: RoleKey | string, moduleKey: ModuleKey): boolean {
+  if (!role) return false;
+  const def = ROLES[role] || getRoleDefinition(role);
+  return def?.write?.includes(moduleKey) ?? false;
+}
+
+export function canReadCollection(role: RoleKey | string, collection: string): boolean {
   const moduleKey = COLLECTION_MODULE[collection];
   if (!moduleKey) return false;
   // System settings fill drop-downs everywhere, so everyone signed in reads them.
@@ -287,11 +437,11 @@ export function canReadCollection(role: RoleKey, collection: string): boolean {
   return canView(role, moduleKey);
 }
 
-export function canWriteCollection(role: RoleKey, collection: string): boolean {
+export function canWriteCollection(role: RoleKey | string, collection: string): boolean {
   const moduleKey = COLLECTION_MODULE[collection];
   if (!moduleKey) return false;
   // Changing how the system behaves is the administrator's alone.
-  if (isConfigCollection(collection)) return isAdmin(role);
+  if (isConfigCollection(collection)) return isAdmin(role as RoleKey) || canWrite(role, "admin");
   if (moduleKey === "dashboard") return true;
   return canWrite(role, moduleKey);
 }

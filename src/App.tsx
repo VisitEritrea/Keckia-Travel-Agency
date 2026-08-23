@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import {
   ActiveTab,
@@ -81,8 +81,31 @@ export default function App() {
   // agency database — the hook has the same shape as useState, so every screen
   // below works exactly as it did when the data was local.
   const { user, status: saveStatus, lastError, dismissError, canEditRecords } = useWorkspace();
+  const [rolesVersion, setRolesVersion] = useState(0);
+
+  useEffect(() => {
+    const handleRolesUpdated = () => {
+      setRolesVersion((v) => v + 1);
+    };
+    window.addEventListener('roles_updated', handleRolesUpdated);
+    return () => window.removeEventListener('roles_updated', handleRolesUpdated);
+  }, []);
+
   const role = user.role;
-  const permissions = ROLES[role];
+  const permissions = ROLES[role] || {
+    label: role,
+    description: '',
+    view: ['dashboard', 'messages'],
+    write: ['messages'],
+    can: {
+      issueTicket: false,
+      recordPayment: false,
+      approveIssue: false,
+      manageAccounts: false,
+      viewAllBookings: true,
+      exportReports: false,
+    },
+  };
 
   const [departments, setDepartments] = useCollection<Department>('departments');
   const [employees, setEmployees] = useCollection<Employee>('employees');
@@ -1160,7 +1183,10 @@ export default function App() {
     admin: 'admin',
   };
 
-  const allowedTabs = Object.keys(TAB_MODULE).filter((tab) => canView(role, TAB_MODULE[tab])) as ActiveTab[];
+  const allowedTabs = useMemo(() => {
+    return Object.keys(TAB_MODULE).filter((tab) => canView(role, TAB_MODULE[tab])) as ActiveTab[];
+  }, [role, rolesVersion]);
+
   const effectiveTab: ActiveTab = allowedTabs.includes(activeTab) ? activeTab : (allowedTabs[0] ?? 'dashboard');
 
   // Control exceptions drive the badge on the Audit tab.
@@ -1295,7 +1321,7 @@ export default function App() {
               vehicles={vehicles}
               tourBookings={tourBookings}
               expeditions={expeditions}
-              canEdit={canEditRecords}
+              canEdit={canWrite(role, 'packages') || canEditRecords}
               onSaveExpedition={handleSaveExpedition}
               onDeleteExpedition={handleDeleteExpedition}
               onAddPackage={handleAddPackage}
@@ -1318,7 +1344,7 @@ export default function App() {
               packages={packages}
               schedules={schedules}
               hotelLetters={hotelLetters}
-              canEdit={canEditRecords}
+              canEdit={canWrite(role, 'hotels') || canEditRecords}
               onAddReservation={handleAddHotelReservation}
               onAddHotel={handleAddHotel}
               onUpdateHotel={handleUpdateHotel}
@@ -1333,7 +1359,7 @@ export default function App() {
             <TransportManagementView
               vehicles={vehicles}
               rentalLetters={rentalLetters}
-              canEdit={canEditRecords}
+              canEdit={canWrite(role, 'transport') || canEditRecords}
               onAddVehicle={handleAddVehicle}
               onUpdateVehicle={handleUpdateVehicle}
               onUpdateVehicleStatus={handleUpdateVehicleStatus}
@@ -1348,10 +1374,10 @@ export default function App() {
               departments={departments}
               schedules={schedules}
               onAddEmployee={handleAddEmployee}
-              onUpdateEmployee={canEditRecords ? handleUpdateEmployee : undefined}
-              onDeleteEmployee={canEditRecords ? handleDeleteEmployee : undefined}
+              onUpdateEmployee={(canWrite(role, 'hr') || canEditRecords) ? handleUpdateEmployee : undefined}
+              onDeleteEmployee={(canWrite(role, 'hr') || canEditRecords) ? handleDeleteEmployee : undefined}
               onUpdateEmployeeStatus={
-                canEditRecords
+                (canWrite(role, 'hr') || canEditRecords)
                   ? (empId: string, status: StaffStatus) => {
                       setEmployees((prev) =>
                         prev.map((e) => (e.id === empId ? { ...e, status } : e))
@@ -1367,7 +1393,7 @@ export default function App() {
               schedules={schedules}
               packages={packages}
               employees={employees}
-              canEdit={canEditRecords}
+              canEdit={canWrite(role, 'tours') || canEditRecords}
               onAddSchedule={handleAddSchedule}
               onUpdateScheduleGuide={handleUpdateScheduleGuide}
               onSavePackageItinerary={handleSavePackageItinerary}
@@ -1383,7 +1409,7 @@ export default function App() {
               packages={packages}
               activities={touristActivities}
               enquiries={websiteEnquiries}
-              canEdit={canEditRecords}
+              canEdit={canWrite(role, 'tourists') || canEditRecords}
               onUpdateEnquiry={handleUpdateEnquiry}
               onConvertEnquiry={handleConvertEnquiry}
               onAddTourist={handleAddTourist}
@@ -1409,7 +1435,7 @@ export default function App() {
               initialSelectedTouristId={preselectedTourist?.id}
               onSaveVoADoc={handleSaveVoADoc}
               onSavePermitDoc={handleSavePermitDoc}
-              onApproveVoADoc={canEditRecords ? handleApproveVoADoc : undefined}
+              onApproveVoADoc={(permissions.can.approveIssue || canWrite(role, 'documents') || canEditRecords) ? handleApproveVoADoc : undefined}
             />
           )}
 
@@ -1419,7 +1445,7 @@ export default function App() {
               tourists={tourists}
               schedules={schedules}
               clients={ticketingClients}
-              canEdit={canEditRecords}
+              canEdit={canWrite(role, 'tickets') || canEditRecords}
               canRecordPayment={permissions.can.recordPayment}
               onIssueTicket={handleIssueTicket}
               onUpdateTicketStatus={handleUpdateTicketStatus}
@@ -1454,7 +1480,7 @@ export default function App() {
               hotels={hotels}
               tickets={tickets}
               canRecordPayment={permissions.can.recordPayment}
-              canEdit={canEditRecords}
+              canEdit={canWrite(role, 'finance') || canEditRecords}
               onAddTransaction={handleAddFinancialTransaction}
               onAddInvoice={handleAddFinancialInvoice}
               onAddReceipt={handleAddReceipt}
