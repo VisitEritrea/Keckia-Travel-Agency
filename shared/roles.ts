@@ -106,12 +106,12 @@ export const DEFAULT_ROLES: Record<RoleKey, RoleDefinition> = {
   },
   AGENT: {
     label: "Sales Agent",
-    description: "Creates bookings and tourist records, and sees only their own sales.",
+    description: "Creates bookings, issues flight tickets and tourist records, and sees only their own sales.",
     view: ["dashboard", "tickets", "tourists", "packages", "hotels", "messages"],
     write: ["tickets", "tourists", "messages"],
     ownRecordsOnly: true,
     can: {
-      issueTicket: false, recordPayment: false, approveIssue: false,
+      issueTicket: true, recordPayment: false, approveIssue: false,
       manageAccounts: false, viewAllBookings: false, exportReports: false,
     },
   },

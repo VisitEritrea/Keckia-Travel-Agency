@@ -1479,6 +1479,9 @@ export default function App() {
               packages={packages}
               hotels={hotels}
               tickets={tickets}
+              employees={employees}
+              schedules={schedules}
+              bookings={bookings}
               canRecordPayment={permissions.can.recordPayment}
               canEdit={canWrite(role, 'finance') || canEditRecords}
               onAddTransaction={handleAddFinancialTransaction}

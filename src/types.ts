@@ -572,6 +572,10 @@ export interface Ticket {
   rebookingNotes?: string;
   agent?: string;
   creditCardRef?: string;
+  salesAgentName?: string;
+  salesAgentId?: string;
+  salesAgentUsername?: string;
+  issuedBy?: string;
   airportShuttle?: boolean;
   airportShuttleTime?: string;
   airportShuttlePickupLocation?: string;

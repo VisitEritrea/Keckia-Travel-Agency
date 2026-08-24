@@ -1,4 +1,5 @@
 import { useOptions } from '../../lib/settings';
+import { useWorkspace } from '../../lib/workspace';
 import React, { useState, useRef } from 'react';
 import {
   X,
@@ -21,8 +22,10 @@ import {
   ScanLine,
   Trash2,
   FileText,
+  User,
 } from 'lucide-react';
 import { TouristProfile, TourSchedule, Ticket, PaymentStatus } from '../../types';
+import { GImageReaderPassportModal } from './GImageReaderPassportModal';
 import {
   scanDocumentWithAI,
   ScannedTouristData,
@@ -79,6 +82,8 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
   // The carrier list the administrator maintains in the Admin Control Centre.
   const configuredAirlines = useOptions('tickets', 'airlines');
   const AIRLINE_OPTIONS = configuredAirlines.length > 0 ? configuredAirlines : AIRLINE_OPTIONS_FALLBACK;
+
+  const { user } = useWorkspace();
 
   const [clientName, setClientName] = useState(preselectedTourist?.fullName || '');
   const [phoneNumber, setPhoneNumber] = useState(preselectedTourist?.phone || '');
@@ -148,7 +153,7 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
   const [rebookingNotes, setRebookingNotes] = useState('');
 
   // Agent & Reconciliation
-  const [agent, setAgent] = useState('Agent 1');
+  const [agent, setAgent] = useState(user?.fullName || (user?.role === 'AGENT' ? user.fullName : 'Sales Agent'));
   const [creditCardRef, setCreditCardRef] = useState('');
 
   // Complimentary Airport Shuttle Timings & Logistics
@@ -178,6 +183,7 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
   const [autofilledFieldsCount, setAutofilledFieldsCount] = useState(0);
   const [highlightAutofill, setHighlightAutofill] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isGImageReaderOpen, setIsGImageReaderOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Apply OCR scanned results
@@ -341,7 +347,11 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
       rebookingOption,
       rebookedDepartureDate,
       rebookingNotes,
-      agent,
+      agent: agent || user?.fullName || 'Sales Agent',
+      salesAgentName: user?.fullName || agent,
+      salesAgentId: user ? String(user.id) : undefined,
+      salesAgentUsername: user?.username,
+      issuedBy: user?.fullName || agent || 'Sales Agent',
       creditCardRef,
 
       // Complimentary Airport Shuttle Timings & Logistics
@@ -529,7 +539,16 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+              <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsGImageReaderOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <ScanLine className="w-3.5 h-3.5" />
+                  Passport OCR (gImageReader)
+                </button>
+
                 {scannedFileDetails ? (
                   <button
                     type="button"
@@ -1121,6 +1140,20 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
               5. Rebooking Options & Quality Verification
             </span>
 
+            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-blue-50/70 border border-blue-200/80">
+              <User className="h-4 w-4 text-blue-600 shrink-0" />
+              <div className="text-xs">
+                <span className="text-slate-500">Active Sales Account: </span>
+                <span className="font-bold text-blue-950">{user?.fullName || 'Sales Agent'}</span>
+                {user?.username && <span className="text-blue-700 font-mono ml-1.5 text-[11px]">(@{user.username})</span>}
+                {user?.role && (
+                  <span className="ml-2 inline-block px-2 py-0.5 rounded-md bg-blue-200/60 text-blue-800 font-semibold text-[10px] uppercase">
+                    {user.role}
+                  </span>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-medium mb-1">Rebooking Option</label>
@@ -1137,12 +1170,12 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
                 </select>
               </div>
               <div>
-                <label className="block text-slate-700 font-medium mb-1">Agent in Charge</label>
+                <label className="block text-slate-700 font-medium mb-1">Sales Agent Name</label>
                 <input
                   type="text"
                   value={agent}
                   onChange={(e) => setAgent(e.target.value)}
-                  placeholder="Agent 1"
+                  placeholder="Sales Agent Name"
                   className="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500"
                 />
               </div>
@@ -1204,6 +1237,22 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
           </div>
         </form>
       </div>
+
+      <GImageReaderPassportModal
+        isOpen={isGImageReaderOpen}
+        onClose={() => setIsGImageReaderOpen(false)}
+        onApplyData={(data, previewUrl, docName) => {
+          applyExtractedData(data);
+          setScannedFileDetails({
+            name: docName || 'passport_scan.jpg',
+            type: 'image/jpeg',
+            size: 'Processed OCR',
+            previewUrl,
+            confidenceScore: data.confidenceScore || 98,
+            docType: data.detectedDocumentType || 'Tesseract OCR Scan',
+          });
+        }}
+      />
     </div>
   );
 };

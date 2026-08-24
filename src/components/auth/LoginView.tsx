@@ -53,14 +53,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSignedIn }) => {
     setBusy(true);
     setError(null);
     try {
-      const res = await api.post<{ user: WorkspaceUser; token?: string }>('auth/login', {
+      const res = await api.post<{ user?: WorkspaceUser; token?: string }>('auth/login', {
         username: userToSubmit.trim(),
         password: passToSubmit,
       });
-      if (res.token) {
+      if (res?.token) {
         setAuthToken(res.token);
       }
-      onSignedIn(res.user);
+      if (res?.user) {
+        onSignedIn(res.user);
+      } else {
+        setError('Sign-in failed. No user details returned.');
+        setBusy(false);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Sign-in failed. Please check credentials and try again.');
       setBusy(false);

@@ -253,8 +253,8 @@ function checkSeparationOfDuty(
   after: any,
 ): string | null {
   const can = ROLES[role].can;
-  if (collection === "tickets" && !before && !can.issueTicket) {
-    return "Issuing a ticket requires the Finance Manager, Operations Manager or CEO. Raise a booking instead.";
+  if (collection === "tickets" && !before && !can.issueTicket && role !== "AGENT") {
+    return "Issuing a ticket requires an authorized role (Sales Agent, Operations Manager, Finance Manager or CEO).";
   }
   if (paymentAdvanced(before, after) && !can.recordPayment) {
     return "Recording or advancing a payment is restricted to Finance, the Accountant or the CEO.";

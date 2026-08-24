@@ -22,15 +22,18 @@ import {
   CheckCircle2,
   AlertTriangle,
   UserCheck,
+  ScanLine,
 } from 'lucide-react';
 import { TicketingClient, Ticket, ClientCategory } from '../../types';
 import { exportToCSV } from '../../utils/exportUtils';
 import { formatToDMY } from '../../utils/dateUtils';
+import { GImageReaderPassportModal } from './GImageReaderPassportModal';
 
 interface ClientDirectoryViewProps {
   clients: TicketingClient[];
   tickets: Ticket[];
   onOpenAddClient: () => void;
+  onAddClient?: (client: TicketingClient) => void;
   onOpenIssueTicketForClient?: (client: TicketingClient) => void;
   onViewTicketPass?: (ticket: Ticket) => void;
 }
@@ -50,6 +53,7 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
   clients = [],
   tickets = [],
   onOpenAddClient,
+  onAddClient,
   onOpenIssueTicketForClient,
   onViewTicketPass,
 }) => {
@@ -57,6 +61,7 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<ClientCategory | 'All'>('All');
   const [selectedClientId, setSelectedClientId] = useState<string>(clients[0]?.id || '');
   const [selectedDocPreview, setSelectedDocPreview] = useState<{ name: string; url?: string } | null>(null);
+  const [isGImageReaderOpen, setIsGImageReaderOpen] = useState(false);
 
   const filteredClients = clients.filter((c) => {
     const matchesCategory = selectedCategory === 'All' || c.category === selectedCategory;
@@ -150,6 +155,13 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setIsGImageReaderOpen(true)}
+            className="px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-600/20"
+          >
+            <ScanLine className="w-4 h-4 text-blue-200" /> Passport OCR (gImageReader)
+          </button>
+
           <button
             onClick={handleExportClientsCSV}
             className="px-4 py-2.5 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
@@ -682,6 +694,47 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Tesseract OCR + gImageReader Passport Scanner Modal */}
+      <GImageReaderPassportModal
+        isOpen={isGImageReaderOpen}
+        onClose={() => setIsGImageReaderOpen(false)}
+        onApplyData={(data, previewUrl, docName) => {
+          if (onAddClient) {
+            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+            const clientCode = `CLI-${(data.nationality?.slice(0, 2) || 'ER').toUpperCase()}-${randomSuffix}`;
+            const newClient: TicketingClient = {
+              id: `clt-${Date.now()}`,
+              clientCode,
+              fullName: data.fullName || 'New Passenger',
+              category: 'Individual',
+              email: data.email || `${(data.fullName || 'client').toLowerCase().replace(/\s+/g, '.')}@client.er`,
+              phone: data.phone || '+291 7 000000',
+              passportNumber: data.passportNumber || 'TBD',
+              passportExpiry: data.passportExpiry || '2030-12-31',
+              passportIssueCountry: data.nationality || 'Eritrea',
+              dateOfBirth: data.dateOfBirth || data.dob || undefined,
+              gender: data.gender || 'Male',
+              nationality: data.nationality || 'Eritrean',
+              residentialCity: 'Asmara',
+              residentialCountry: 'Eritrea',
+              address: 'Asmara, Eritrea',
+              creditLimitUSD: 0,
+              outstandingBalanceUSD: 0,
+              totalBookingsCount: 0,
+              totalSpentUSD: 0,
+              vipStatus: false,
+              passportDocumentName: docName || 'passport_scan.jpg',
+              passportDocumentUrl: previewUrl,
+              createdAt: new Date().toISOString(),
+            };
+            onAddClient(newClient);
+            setSelectedClientId(newClient.id);
+          } else {
+            onOpenAddClient();
+          }
+        }}
+      />
     </div>
   );
 };

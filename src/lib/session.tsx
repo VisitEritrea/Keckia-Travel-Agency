@@ -183,6 +183,10 @@ export const SessionGate: React.FC<{ children: React.ReactNode }> = ({ children 
   const [busy, setBusy] = useState(false);
 
   const loadWorkspace = useCallback(async (signedIn: WorkspaceUser) => {
+    if (!signedIn) {
+      setPhase('anonymous');
+      return;
+    }
     try {
       const data = await api.get<Bootstrap>('bootstrap');
       const safeCollections = data?.collections || {};
@@ -197,7 +201,7 @@ export const SessionGate: React.FC<{ children: React.ReactNode }> = ({ children 
       // The offer is made once. If this workspace has already loaded the sample
       // set — or deliberately cleared it — an empty workspace is the intended
       // state and the offer must not come back.
-      const offerStarter = isEmpty && signedIn.role === 'CEO' && !data?.sampleDataDecided;
+      const offerStarter = isEmpty && signedIn?.role === 'CEO' && !data?.sampleDataDecided;
       setPhase(offerStarter ? 'starter' : 'ready');
     } catch (err: any) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
@@ -219,9 +223,14 @@ export const SessionGate: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const begin = useCallback(
-    async (signedIn: WorkspaceUser) => {
+    async (signedIn?: WorkspaceUser | null) => {
+      if (!signedIn) {
+        setUser(null);
+        setPhase('anonymous');
+        return;
+      }
       setUser(signedIn);
-      if (signedIn.mustChangePassword) {
+      if (signedIn?.mustChangePassword) {
         setPhase('password');
         return;
       }
@@ -244,9 +253,13 @@ export const SessionGate: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     (async () => {
       try {
-        const { user: existing } = await api.get<{ user: WorkspaceUser | null }>('auth/me');
-        if (existing) await begin(existing);
-        else setPhase('anonymous');
+        const res = await api.get<{ user: WorkspaceUser | null }>('auth/me');
+        const existing = res?.user;
+        if (existing) {
+          await begin(existing);
+        } else {
+          setPhase('anonymous');
+        }
       } catch (error) {
         // A database that is missing or unreachable answers 503 with an
         // explanation. Showing that explanation is far more use than dropping

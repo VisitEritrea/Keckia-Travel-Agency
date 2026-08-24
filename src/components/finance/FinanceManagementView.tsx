@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   DollarSign,
   TrendingUp,
@@ -27,6 +27,19 @@ import {
   Sparkles,
   ShieldCheck,
   Coins,
+  Upload,
+  Image as ImageIcon,
+  Paperclip,
+  Trash2,
+  Check,
+  X,
+  Tag,
+  User,
+  Hash,
+  Percent,
+  ExternalLink,
+  ChevronRight,
+  Landmark,
 } from 'lucide-react';
 import {
   FinancialTransaction,
@@ -36,8 +49,12 @@ import {
   TourPackage,
   Hotel,
   TicketRecord,
+  PaymentMethod,
+  TransactionType,
+  Employee,
 } from '../../types';
-import { exportToCSV, printElement, exportElementAsHTML } from '../../utils/exportUtils';
+import { exportToCSV, printElement } from '../../utils/exportUtils';
+import { useWorkspace } from '../../lib/workspace';
 
 interface FinanceManagementViewProps {
   transactions: FinancialTransaction[];
@@ -46,6 +63,8 @@ interface FinanceManagementViewProps {
   packages?: TourPackage[];
   hotels?: Hotel[];
   tickets?: TicketRecord[];
+  employees?: Employee[];
+  canEdit?: boolean;
   onAddTransaction: (txn: FinancialTransaction) => void;
   onAddInvoice?: (inv: FinancialInvoice) => void;
 }
@@ -57,9 +76,12 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
   packages = [],
   hotels = [],
   tickets = [],
+  employees = [],
+  canEdit = true,
   onAddTransaction,
   onAddInvoice,
 }) => {
+  const { user } = useWorkspace();
   const [activeSubTab, setActiveSubTab] = useState<'ledger' | 'invoices' | 'breakdown'>('ledger');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -69,26 +91,59 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
   // Modal states
   const [isAddTxnModalOpen, setIsAddTxnModalOpen] = useState(false);
   const [activeInvoiceForView, setActiveInvoiceForView] = useState<FinancialInvoice | null>(null);
+  const [activeVoucherTxn, setActiveVoucherTxn] = useState<FinancialTransaction | null>(null);
 
   // New Transaction Form State
   const [txnCategory, setTxnCategory] = useState<FinancialCategory>('Tour Packages');
-  const [txnType, setTxnType] = useState<'Income' | 'Expense'>('Income');
+  const [txnSubCategory, setTxnSubCategory] = useState('');
+  const [txnType, setTxnType] = useState<TransactionType>('Income');
   const [txnDesc, setTxnDesc] = useState('');
+  const [txnDate, setTxnDate] = useState(new Date().toISOString().split('T')[0]);
+  const [txnClearingDate, setTxnClearingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [txnCurrency, setTxnCurrency] = useState<'USD' | 'ERN' | 'EUR' | 'GBP'>('USD');
   const [txnAmountUSD, setTxnAmountUSD] = useState<number>(500);
+  const [txnExchangeRate, setTxnExchangeRate] = useState<number>(15.0);
+  
+  // Payer / Payee
   const [txnPayerPayee, setTxnPayerPayee] = useState('');
-  const [txnPaymentMethod, setTxnPaymentMethod] = useState<'Bank Wire' | 'Cash (USD)' | 'Cash (NFA)' | 'Credit Card' | 'Agent Ledger'>('Bank Wire');
-  const [txnStatus, setTxnStatus] = useState<'Completed' | 'Pending'>('Completed');
+  const [txnPayerPayeeType, setTxnPayerPayeeType] = useState<
+    'Client / Tourist' | 'Corporate Partner' | 'Hotel Vendor' | 'Airline / GDS' | 'Driver / Guide / Staff' | 'Gov Authority' | 'Fuel / Logistics Vendor' | 'Other'
+  >('Client / Tourist');
+  const [txnPayerPayeeContact, setTxnPayerPayeeContact] = useState('');
+  const [txnTaxId, setTxnTaxId] = useState('');
+
+  // Payment method & Bank routing
+  const [txnPaymentMethod, setTxnPaymentMethod] = useState<PaymentMethod>('Bank Wire');
+  const [txnBankAccount, setTxnBankAccount] = useState('Commercial Bank of Eritrea (CBE A/C # 108-0029-4112)');
+  const [txnTaxRatePercent, setTxnTaxRatePercent] = useState<number>(0);
+  const [txnStatus, setTxnStatus] = useState<'Completed' | 'Pending' | 'Reconciled'>('Completed');
+  
+  // Reference & Receipt
+  const [txnRefCode, setTxnRefCode] = useState(`TXN-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
   const [txnReceiptNo, setTxnReceiptNo] = useState(`REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
-  const [txnRecordedBy, setTxnRecordedBy] = useState('Central Finance Ops');
+  const [txnRecordedBy, setTxnRecordedBy] = useState(user?.fullName || 'Finance Department');
+  const [txnAuthorizedBy, setTxnAuthorizedBy] = useState('Semere Beraki (Finance Controller)');
   const [txnNotes, setTxnNotes] = useState('');
+
+  // Entity Linkage
+  const [linkedEntityType, setLinkedEntityType] = useState<'none' | 'tourist' | 'ticket' | 'booking' | 'hotel' | 'employee'>('none');
+  const [linkedEntityId, setLinkedEntityId] = useState('');
+  const [linkedEntityName, setLinkedEntityName] = useState('');
+
+  // Receipt File Attachment State
+  const [receiptAttachmentName, setReceiptAttachmentName] = useState<string>('');
+  const [receiptAttachmentSize, setReceiptAttachmentSize] = useState<string>('');
+  const [receiptUrl, setReceiptUrl] = useState<string>('');
+  const [isReceiptDragging, setIsReceiptDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Financial Calculations
   const totalIncomeUSD = transactions
-    .filter((t) => t.type === 'Income' && t.status === 'Completed')
+    .filter((t) => t.type === 'Income' && (t.status === 'Completed' || t.status === 'Reconciled'))
     .reduce((sum, t) => sum + t.amountUSD, 0);
 
   const totalExpenseUSD = transactions
-    .filter((t) => t.type === 'Expense' && t.status === 'Completed')
+    .filter((t) => t.type === 'Expense' && (t.status === 'Completed' || t.status === 'Reconciled'))
     .reduce((sum, t) => sum + t.amountUSD, 0);
 
   const netProfitUSD = totalIncomeUSD - totalExpenseUSD;
@@ -106,6 +161,11 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
     'Transport & Fleet',
     'Staff Payroll',
     'Government Fees',
+    'Office & Utilities',
+    'Marketing & Promotion',
+    'Equipment & Supplies',
+    'Taxes & Bank Charges',
+    'Miscellaneous',
     'Other',
   ];
 
@@ -130,6 +190,7 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
       t.referenceCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.payerOrPayee.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.receiptNumber || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.receiptAttachmentName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.category.toLowerCase().includes(searchQuery.toLowerCase());
 
     return matchesCategory && matchesType && matchesStatus && matchesSearch;
@@ -140,15 +201,20 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
       'Date',
       'Ref Code',
       'Category',
+      'Sub Category',
       'Type',
       'Description',
       'Amount (USD)',
       'Amount (NFA)',
       'Payer / Payee',
+      'Payer Type',
       'Payment Method',
+      'Bank Account',
       'Status',
       'Receipt No',
+      'Receipt Attached',
       'Recorded By',
+      'Authorized By',
       'Notes',
     ];
 
@@ -156,15 +222,20 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
       t.date,
       t.referenceCode,
       t.category,
+      t.subCategory || '',
       t.type,
       t.description,
       t.amountUSD,
       t.amountNFA,
       t.payerOrPayee,
+      t.payerPayeeType || '',
       t.paymentMethod,
+      t.bankAccount || '',
       t.status,
       t.receiptNumber || '',
+      t.receiptUrl ? 'Yes' : 'No',
       t.recordedBy,
+      t.authorizedBy || '',
       t.notes || '',
     ]);
 
@@ -175,33 +246,96 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
     printElement('printable-finance-ledger', `Financial_General_Ledger_${new Date().toISOString().split('T')[0]}`);
   };
 
+  // Handle File Upload for Receipts
+  const handleFileUpload = (file: File) => {
+    if (!file) return;
+    setReceiptAttachmentName(file.name);
+    const sizeInKB = Math.round(file.size / 1024);
+    setReceiptAttachmentSize(sizeInKB > 1024 ? `${(sizeInKB / 1024).toFixed(1)} MB` : `${sizeInKB} KB`);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setReceiptUrl(dataUrl);
+      if (!txnReceiptNo || txnReceiptNo.includes('REC-')) {
+        setTxnReceiptNo(`REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsReceiptDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  };
+
   const handleCreateTxnSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!txnDesc.trim() || txnAmountUSD <= 0) return;
 
+    const taxAmountUSD = (txnAmountUSD * txnTaxRatePercent) / 100;
+    const netAmountUSD = txnType === 'Income' ? txnAmountUSD - taxAmountUSD : txnAmountUSD + taxAmountUSD;
+
     const newTxn: FinancialTransaction = {
       id: `txn-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
-      referenceCode: `TXN-${txnCategory.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      date: txnDate,
+      clearingDate: txnClearingDate,
+      referenceCode: txnRefCode || `TXN-${txnCategory.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
       category: txnCategory,
+      subCategory: txnSubCategory.trim() || undefined,
       type: txnType,
       description: txnDesc.trim(),
       amountUSD: Number(txnAmountUSD),
-      amountNFA: Number(txnAmountUSD) * 15,
-      payerOrPayee: txnPayerPayee.trim() || 'Internal Cash Office',
+      amountNFA: Number(txnAmountUSD) * txnExchangeRate,
+      currency: txnCurrency,
+      exchangeRate: txnExchangeRate,
+      payerOrPayee: txnPayerPayee.trim() || 'General Operations Cash Desk',
+      payerPayeeType: txnPayerPayeeType,
+      payerPayeeContact: txnPayerPayeeContact.trim() || undefined,
+      taxId: txnTaxId.trim() || undefined,
       paymentMethod: txnPaymentMethod,
+      bankAccount: txnBankAccount.trim() || undefined,
+      taxRatePercent: txnTaxRatePercent,
+      taxAmountUSD,
+      netAmountUSD,
       status: txnStatus,
-      receiptNumber: txnReceiptNo.trim(),
-      recordedBy: txnRecordedBy.trim() || 'Central Finance Ops',
-      notes: txnNotes.trim(),
+      receiptNumber: txnReceiptNo.trim() || undefined,
+      receiptUrl: receiptUrl || undefined,
+      receiptAttachmentName: receiptAttachmentName || undefined,
+      receiptAttachmentSize: receiptAttachmentSize || undefined,
+      linkedEntityType: linkedEntityType !== 'none' ? (linkedEntityType as any) : undefined,
+      linkedEntityId: linkedEntityId || undefined,
+      linkedEntityName: linkedEntityName || undefined,
+      recordedBy: txnRecordedBy.trim() || user?.fullName || 'Finance Ops',
+      authorizedBy: txnAuthorizedBy.trim() || undefined,
+      notes: txnNotes.trim() || undefined,
+      isVerified: Boolean(receiptUrl),
+      verifiedAt: receiptUrl ? new Date().toISOString() : undefined,
+      verifiedBy: receiptUrl ? (user?.fullName || 'Finance Ops') : undefined,
     };
 
     onAddTransaction(newTxn);
     setIsAddTxnModalOpen(false);
+
+    // Reset Form
     setTxnDesc('');
     setTxnAmountUSD(500);
     setTxnPayerPayee('');
+    setTxnSubCategory('');
+    setTxnPayerPayeeContact('');
+    setTxnTaxId('');
     setTxnNotes('');
+    setReceiptUrl('');
+    setReceiptAttachmentName('');
+    setReceiptAttachmentSize('');
+    setLinkedEntityType('none');
+    setLinkedEntityId('');
+    setLinkedEntityName('');
+    setTxnRefCode(`TXN-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
+    setTxnReceiptNo(`REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
   };
 
   return (
@@ -239,12 +373,18 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
             <Printer className="w-4 h-4" /> Print Ledger
           </button>
 
-          <button
-            onClick={() => setIsAddTxnModalOpen(true)}
-            className="bg-brand-500 hover:bg-brand-600 text-slate-950 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest shadow-sm hover:shadow transition flex items-center gap-2 cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" /> Record Transaction
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => {
+                setTxnRefCode(`TXN-${txnCategory.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`);
+                setTxnReceiptNo(`REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
+                setIsAddTxnModalOpen(true);
+              }}
+              className="bg-brand-500 hover:bg-brand-600 text-slate-950 px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest shadow-sm hover:shadow transition flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Record Transaction
+            </button>
+          )}
         </div>
       </div>
 
@@ -329,7 +469,7 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
 
       {/* Activity Summary Cards by Business Stream */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {categoryBreakdown.map((item) => (
+        {categoryBreakdown.slice(0, 6).map((item) => (
           <div
             key={item.category}
             onClick={() => {
@@ -395,7 +535,7 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
             }`}
           >
             <FileText className="w-3.5 h-3.5 text-purple-600" />
-            <span>Invoices & Receipts ({invoices.length})</span>
+            <span>Invoices & Billing ({invoices.length})</span>
           </button>
         </div>
 
@@ -404,7 +544,7 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900"
+            className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900 cursor-pointer"
           >
             <option value="all">All Activities</option>
             {categoriesList.map((c) => (
@@ -417,21 +557,24 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900"
+            className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900 cursor-pointer"
           >
             <option value="all">All Flows (In/Out)</option>
-            <option value="Income">Income (+)</option>
-            <option value="Expense">Expense (-)</option>
+            <option value="Income">Income (+ Revenue)</option>
+            <option value="Expense">Expense (- Direct Cost)</option>
+            <option value="Transfer">Transfer</option>
+            <option value="Refund">Refund</option>
           </select>
 
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900"
+            className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900 cursor-pointer"
           >
             <option value="all">All Statuses</option>
             <option value="Completed">Completed</option>
             <option value="Pending">Pending / Loan</option>
+            <option value="Reconciled">Reconciled</option>
           </select>
 
           {/* Search Box */}
@@ -441,7 +584,7 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search reference, receipt..."
+              placeholder="Search reference, receipt, vendor..."
               className="w-full pl-8 pr-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-amber-500 shadow-xs"
             />
           </div>
@@ -463,14 +606,16 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-mono uppercase text-[10px]">
-                      <th className="py-3 px-4 font-bold">Date & Ref</th>
-                      <th className="py-3 px-4 font-bold">Activity / Category</th>
-                      <th className="py-3 px-4 font-bold">Description & Link</th>
-                      <th className="py-3 px-4 font-bold">Payer / Payee</th>
-                      <th className="py-3 px-4 font-bold">Method</th>
-                      <th className="py-3 px-4 font-bold text-right">Amount (USD)</th>
-                      <th className="py-3 px-4 font-bold text-right">Nakfa (ERN)</th>
-                      <th className="py-3 px-4 font-bold text-center">Status</th>
+                      <th className="py-3.5 px-4 font-bold">Date & Ref</th>
+                      <th className="py-3.5 px-4 font-bold">Category</th>
+                      <th className="py-3.5 px-4 font-bold">Description & Purpose</th>
+                      <th className="py-3.5 px-4 font-bold">Payer / Payee</th>
+                      <th className="py-3.5 px-4 font-bold">Payment Method</th>
+                      <th className="py-3.5 px-4 font-bold text-right">Amount (USD)</th>
+                      <th className="py-3.5 px-4 font-bold text-right">Nakfa (ERN)</th>
+                      <th className="py-3.5 px-4 font-bold text-center">Receipt Doc</th>
+                      <th className="py-3.5 px-4 font-bold text-center">Status</th>
+                      <th className="py-3.5 px-4 font-bold text-right">Voucher</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -505,6 +650,11 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
                             >
                               {txn.category}
                             </span>
+                            {txn.subCategory && (
+                              <span className="text-[9px] text-slate-500 block font-mono mt-0.5">
+                                {txn.subCategory}
+                              </span>
+                            )}
                           </td>
 
                           {/* Description */}
@@ -512,24 +662,31 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
                             <div className="font-semibold text-slate-900 line-clamp-2">
                               {txn.description}
                             </div>
-                            {txn.receiptNumber && (
-                              <span className="text-[10px] font-mono text-slate-400 block mt-0.5">
-                                Receipt: {txn.receiptNumber}
+                            {txn.linkedEntityName && (
+                              <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                                Linked: {txn.linkedEntityName}
                               </span>
                             )}
                           </td>
 
                           {/* Payer / Payee */}
                           <td className="py-3.5 px-4 text-slate-700">
-                            <span className="font-medium">{txn.payerOrPayee}</span>
-                            <span className="text-[10px] text-slate-400 block font-mono">
-                              By: {txn.recordedBy}
-                            </span>
+                            <span className="font-medium text-slate-900">{txn.payerOrPayee}</span>
+                            {txn.payerPayeeType && (
+                              <span className="text-[10px] text-slate-500 block font-mono">
+                                {txn.payerPayeeType}
+                              </span>
+                            )}
                           </td>
 
-                          {/* Method */}
+                          {/* Method & Bank */}
                           <td className="py-3.5 px-4 text-slate-600 font-mono text-[11px]">
-                            {txn.paymentMethod}
+                            <div className="font-semibold text-slate-800">{txn.paymentMethod}</div>
+                            {txn.bankAccount && (
+                              <span className="text-[9px] text-slate-400 block truncate max-w-[130px]" title={txn.bankAccount}>
+                                {txn.bankAccount}
+                              </span>
+                            )}
                           </td>
 
                           {/* Amount USD */}
@@ -545,20 +702,51 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
 
                           {/* ERN Equivalent */}
                           <td className="py-3.5 px-4 text-right font-mono text-slate-500 text-[11px]">
-                            {(txn.amountUSD * 15).toLocaleString()} ERN
+                            {(txn.amountNFA || txn.amountUSD * 15).toLocaleString()} ERN
+                          </td>
+
+                          {/* Receipt Attachment Status */}
+                          <td className="py-3.5 px-4 text-center">
+                            {txn.receiptUrl || txn.receiptAttachmentName ? (
+                              <button
+                                onClick={() => setActiveVoucherTxn(txn)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[10px] font-bold cursor-pointer transition"
+                                title="View Attached Receipt Document"
+                              >
+                                <Paperclip className="w-3 h-3 text-emerald-600" />
+                                <span>Attached</span>
+                              </button>
+                            ) : txn.receiptNumber ? (
+                              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                #{txn.receiptNumber}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-300 font-mono italic">No file</span>
+                            )}
                           </td>
 
                           {/* Status */}
                           <td className="py-3.5 px-4 text-center">
                             <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                txn.status === 'Completed'
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                txn.status === 'Completed' || txn.status === 'Reconciled'
                                   ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                                   : 'bg-amber-50 text-amber-800 border border-amber-200'
                               }`}
                             >
                               {txn.status}
                             </span>
+                          </td>
+
+                          {/* Voucher Button */}
+                          <td className="py-3.5 px-4 text-right">
+                            <button
+                              onClick={() => setActiveVoucherTxn(txn)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer border border-slate-200"
+                              title="View Professional Payment Voucher"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-blue-700" />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -589,21 +777,20 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
               <div className="space-y-3">
                 {categoryBreakdown
                   .filter((c) => c.income > 0)
-                  .map((c) => {
-                    const percentage = totalIncomeUSD > 0 ? Math.round((c.income / totalIncomeUSD) * 100) : 0;
-
+                  .map((item) => {
+                    const percent = totalIncomeUSD > 0 ? Math.round((item.income / totalIncomeUSD) * 100) : 0;
                     return (
-                      <div key={c.category} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-800">{c.category}</span>
-                          <span className="font-mono font-bold text-slate-900">
-                            ${c.income.toLocaleString()} USD ({percentage}%)
+                      <div key={item.category} className="space-y-1">
+                        <div className="flex justify-between text-xs font-semibold text-slate-700">
+                          <span>{item.category}</span>
+                          <span className="font-mono text-slate-900 font-bold">
+                            ${item.income.toLocaleString()} USD ({percent}%)
                           </span>
                         </div>
                         <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                           <div
-                            className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${percentage}%` }}
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                            style={{ width: `${percent}%` }}
                           />
                         </div>
                       </div>
@@ -616,7 +803,7 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
             <div className="p-6 rounded-[2rem] bg-white border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 className="text-base font-serif italic font-bold text-slate-900 flex items-center gap-2">
-                  <ArrowDownRight className="w-5 h-5 text-rose-600" /> Cost Distribution by Operational Activity
+                  <ArrowDownRight className="w-5 h-5 text-rose-600" /> Expense Trace by Category
                 </h3>
                 <span className="font-mono text-rose-800 font-bold text-sm">
                   ${totalExpenseUSD.toLocaleString()} USD Total
@@ -626,21 +813,20 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
               <div className="space-y-3">
                 {categoryBreakdown
                   .filter((c) => c.expense > 0)
-                  .map((c) => {
-                    const percentage = totalExpenseUSD > 0 ? Math.round((c.expense / totalExpenseUSD) * 100) : 0;
-
+                  .map((item) => {
+                    const percent = totalExpenseUSD > 0 ? Math.round((item.expense / totalExpenseUSD) * 100) : 0;
                     return (
-                      <div key={c.category} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-800">{c.category}</span>
-                          <span className="font-mono font-bold text-slate-900">
-                            ${c.expense.toLocaleString()} USD ({percentage}%)
+                      <div key={item.category} className="space-y-1">
+                        <div className="flex justify-between text-xs font-semibold text-slate-700">
+                          <span>{item.category}</span>
+                          <span className="font-mono text-slate-900 font-bold">
+                            ${item.expense.toLocaleString()} USD ({percent}%)
                           </span>
                         </div>
                         <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
                           <div
-                            className="h-full bg-rose-500 rounded-full"
-                            style={{ width: `${percentage}%` }}
+                            className="h-full bg-rose-500 rounded-full transition-all duration-300"
+                            style={{ width: `${percent}%` }}
                           />
                         </div>
                       </div>
@@ -721,132 +907,785 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
         </div>
       )}
 
-      {/* Add Transaction Modal */}
+      {/* ========================================================================= */}
+      {/* ADD FINANCIAL TRANSACTION MODAL WITH RECEIPT UPLOAD & COMPREHENSIVE FIELDS */}
+      {/* ========================================================================= */}
       {isAddTxnModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden my-8 animate-in fade-in duration-200">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h2 className="text-lg font-serif font-bold text-slate-900 italic">
-                Record Financial Transaction
-              </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-3xl overflow-hidden my-6 animate-in fade-in duration-200 flex flex-col max-h-[92vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-blue-100 text-blue-800">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-serif font-bold text-slate-900">
+                    Record Financial Transaction
+                  </h2>
+                  <p className="text-[11px] text-slate-500">
+                    Capture comprehensive accounting details, tax invoices, and attach supporting receipts.
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={() => setIsAddTxnModalOpen(false)}
                 className="p-2 rounded-full text-slate-400 hover:text-slate-700 transition cursor-pointer"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateTxnSubmit} className="p-6 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Flow Type</label>
-                  <select
-                    value={txnType}
-                    onChange={(e) => setTxnType(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-900"
-                  >
-                    <option value="Income">Income (+ Revenue)</option>
-                    <option value="Expense">Expense (- Direct Cost)</option>
-                  </select>
+            <form onSubmit={handleCreateTxnSubmit} className="p-6 space-y-5 text-xs overflow-y-auto flex-1">
+              {/* SECTION 1: TRANSACTION TYPE & CLASSIFICATION */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                  1. Transaction Flow & Category
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Flow Type</label>
+                    <select
+                      value={txnType}
+                      onChange={(e) => setTxnType(e.target.value as TransactionType)}
+                      className={`w-full px-3 py-2 rounded-xl border font-bold text-xs cursor-pointer ${
+                        txnType === 'Income'
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                          : txnType === 'Expense'
+                          ? 'bg-rose-50 border-rose-300 text-rose-900'
+                          : 'bg-white border-slate-200 text-slate-900'
+                      }`}
+                    >
+                      <option value="Income">Income (+ Revenue Inflow)</option>
+                      <option value="Expense">Expense (- Cost Outflow)</option>
+                      <option value="Transfer">Internal Transfer</option>
+                      <option value="Refund">Client Refund</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">General Ledger Category</label>
+                    <select
+                      value={txnCategory}
+                      onChange={(e) => setTxnCategory(e.target.value as FinancialCategory)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-bold text-slate-900 cursor-pointer"
+                    >
+                      {categoriesList.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Sub-Category (Optional)</label>
+                    <input
+                      type="text"
+                      value={txnSubCategory}
+                      onChange={(e) => setTxnSubCategory(e.target.value)}
+                      placeholder="e.g. Tour Guide Per Diem, Fuel"
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Activity Category</label>
-                  <select
-                    value={txnCategory}
-                    onChange={(e) => setTxnCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-900"
-                  >
-                    {categoriesList.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Transaction Reference Code</label>
+                    <input
+                      type="text"
+                      required
+                      value={txnRefCode}
+                      onChange={(e) => setTxnRefCode(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono text-slate-900 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Transaction Date</label>
+                    <input
+                      type="date"
+                      required
+                      value={txnDate}
+                      onChange={(e) => setTxnDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Clearing / Value Date</label>
+                    <input
+                      type="date"
+                      value={txnClearingDate}
+                      onChange={(e) => setTxnClearingDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono text-slate-900"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Description / Activity Link</label>
+              {/* SECTION 2: DESCRIPTION & BUSINESS PURPOSE */}
+              <div className="space-y-1">
+                <label className="block font-semibold text-slate-700">
+                  Description & Business Purpose <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   value={txnDesc}
                   onChange={(e) => setTxnDesc(e.target.value)}
-                  placeholder="e.g. Asmara UNESCO Tour Booking Deposit"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900"
+                  placeholder="e.g. Asmara UNESCO Historical Tour Deposit for Jean-Luc Dupont party"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-amber-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Amount (USD $)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="any"
-                    required
-                    value={txnAmountUSD}
-                    onChange={(e) => setTxnAmountUSD(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-mono font-bold"
-                  />
+              {/* SECTION 3: AMOUNT, MULTI-CURRENCY & TAX */}
+              <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-3">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-900 font-bold block">
+                  2. Financial Amounts, Conversion & Tax
+                </span>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Currency</label>
+                    <select
+                      value={txnCurrency}
+                      onChange={(e) => setTxnCurrency(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-bold text-slate-900 cursor-pointer"
+                    >
+                      <option value="USD">USD ($)</option>
+                      <option value="ERN">ERN (Nakfa)</option>
+                      <option value="EUR">EUR (€)</option>
+                      <option value="GBP">GBP (£)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Amount ($ USD)</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="any"
+                      required
+                      value={txnAmountUSD}
+                      onChange={(e) => setTxnAmountUSD(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Exchange Rate (ERN)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={txnExchangeRate}
+                      onChange={(e) => setTxnExchangeRate(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Converted (Nakfa ERN)</label>
+                    <div className="px-3 py-2 rounded-xl bg-amber-100/70 border border-amber-300 text-amber-950 font-mono font-bold">
+                      {(txnAmountUSD * txnExchangeRate).toLocaleString()} ERN
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Converted (ERN @ 15:1)
-                  </label>
-                  <div className="px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 font-mono font-bold">
-                    {(txnAmountUSD * 15).toLocaleString()} ERN
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-amber-200/60">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Tax / VAT Rate (%)</label>
+                    <select
+                      value={txnTaxRatePercent}
+                      onChange={(e) => setTxnTaxRatePercent(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 cursor-pointer"
+                    >
+                      <option value={0}>0% - Tax Exempt / Zero Rated</option>
+                      <option value={5}>5% - Tourism & Hospitality Service Charge</option>
+                      <option value={15}>15% - Standard Commercial VAT</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Calculated Tax Amount</label>
+                    <div className="px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono text-slate-800">
+                      ${((txnAmountUSD * txnTaxRatePercent) / 100).toFixed(2)} USD
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Accounting Status</label>
+                    <select
+                      value={txnStatus}
+                      onChange={(e) => setTxnStatus(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-bold text-slate-900 cursor-pointer"
+                    >
+                      <option value="Completed">Completed (Cleared)</option>
+                      <option value="Pending">Pending / Receivables Loan</option>
+                      <option value="Reconciled">Reconciled (Audited)</option>
+                    </select>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Payer / Payee</label>
-                  <input
-                    type="text"
-                    value={txnPayerPayee}
-                    onChange={(e) => setTxnPayerPayee(e.target.value)}
-                    placeholder="e.g. Jean-Luc Dupont"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900"
-                  />
+              {/* SECTION 4: PAYER / PAYEE & BANK ROUTING */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                  3. Payer / Payee & Payment Method
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Payer / Payee Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={txnPayerPayee}
+                      onChange={(e) => setTxnPayerPayee(e.target.value)}
+                      placeholder="e.g. Jean-Luc Dupont or Asmara Palace Hotel"
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Payer / Payee Category</label>
+                    <select
+                      value={txnPayerPayeeType}
+                      onChange={(e) => setTxnPayerPayeeType(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 cursor-pointer"
+                    >
+                      <option value="Client / Tourist">Client / Tourist</option>
+                      <option value="Corporate Partner">Corporate Partner</option>
+                      <option value="Hotel Vendor">Hotel Vendor</option>
+                      <option value="Airline / GDS">Airline / GDS Carrier</option>
+                      <option value="Driver / Guide / Staff">Driver / Guide / Staff</option>
+                      <option value="Gov Authority">Gov Authority (Tourism / Immigration)</option>
+                      <option value="Fuel / Logistics Vendor">Fuel / Logistics Vendor</option>
+                      <option value="Other">Other Third Party</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Tax ID / TIN (Optional)</label>
+                    <input
+                      type="text"
+                      value={txnTaxId}
+                      onChange={(e) => setTxnTaxId(e.target.value)}
+                      placeholder="e.g. TIN-ER-89412"
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono text-slate-900"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Payment Method</label>
-                  <select
-                    value={txnPaymentMethod}
-                    onChange={(e) => setTxnPaymentMethod(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900"
-                  >
-                    <option value="Bank Wire">Bank Wire / Swift</option>
-                    <option value="Cash (USD)">Cash (USD)</option>
-                    <option value="Cash (NFA)">Cash (NFA / Nakfa)</option>
-                    <option value="Credit Card">Credit Card (POS)</option>
-                    <option value="Agent Ledger">Agent Ledger Credit</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Payment Method</label>
+                    <select
+                      value={txnPaymentMethod}
+                      onChange={(e) => setTxnPaymentMethod(e.target.value as PaymentMethod)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 cursor-pointer font-bold"
+                    >
+                      <option value="Bank Wire">Bank Wire / Swift</option>
+                      <option value="Commercial Bank of Eritrea (CBE)">Commercial Bank of Eritrea (CBE)</option>
+                      <option value="Cash (USD)">Cash (USD)</option>
+                      <option value="Cash (NFA)">Cash (NFA / Nakfa)</option>
+                      <option value="Credit Card">Credit Card (POS Terminal)</option>
+                      <option value="Telebirr / Mobile Money">Telebirr / Mobile Money</option>
+                      <option value="Agent Ledger">Agent Ledger Credit</option>
+                      <option value="Company Cheque">Company Cheque</option>
+                      <option value="Traveler Cheque">Traveler Cheque</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Bank Account / Terminal Reference</label>
+                    <input
+                      type="text"
+                      value={txnBankAccount}
+                      onChange={(e) => setTxnBankAccount(e.target.value)}
+                      placeholder="e.g. CBE A/C # 108-0029-4112 / Swift ERTBAS22"
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono text-slate-900 text-xs"
+                    />
+                  </div>
                 </div>
               </div>
 
+              {/* SECTION 5: RECEIPT UPLOAD & ATTACHMENT */}
+              <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-blue-900 font-bold flex items-center gap-1.5">
+                    <Paperclip className="w-3.5 h-3.5 text-blue-700" />
+                    4. Attach Supporting Receipt / Tax Invoice
+                  </span>
+                  <span className="text-[10px] text-blue-700 font-mono">PNG, JPG, PDF & scanned receipts</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Official Receipt Number</label>
+                    <input
+                      type="text"
+                      value={txnReceiptNo}
+                      onChange={(e) => setTxnReceiptNo(e.target.value)}
+                      placeholder="e.g. REC-2026-8941"
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 font-mono font-bold text-slate-900"
+                    />
+                  </div>
+
+                  {/* Dropzone & Picker */}
+                  <div className="sm:col-span-2">
+                    <label className="block font-semibold text-slate-700 mb-1">Upload Receipt Document</label>
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsReceiptDragging(true);
+                      }}
+                      onDragLeave={() => setIsReceiptDragging(false)}
+                      onDrop={handleFileDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`p-3.5 rounded-xl border-2 border-dashed transition cursor-pointer flex items-center justify-between gap-3 ${
+                        isReceiptDragging
+                          ? 'border-blue-500 bg-blue-100/70'
+                          : receiptUrl
+                          ? 'border-emerald-300 bg-emerald-50/60'
+                          : 'border-blue-200 bg-white hover:bg-blue-50/40'
+                      }`}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleFileUpload(e.target.files[0]);
+                          }
+                        }}
+                        className="hidden"
+                      />
+
+                      {receiptUrl ? (
+                        <div className="flex items-center gap-3 min-w-0">
+                          {receiptUrl.startsWith('data:image') ? (
+                            <img
+                              src={receiptUrl}
+                              alt="Receipt Thumbnail"
+                              className="w-10 h-10 object-cover rounded-lg border border-emerald-300 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-mono font-bold text-xs">
+                              PDF
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 text-xs truncate">
+                              {receiptAttachmentName || 'Receipt_Attachment.png'}
+                            </p>
+                            <span className="text-[10px] text-emerald-700 font-mono font-semibold">
+                              {receiptAttachmentSize || 'Attached'} · Verified
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-slate-600">
+                          <Upload className="w-4 h-4 text-blue-600 shrink-0" />
+                          <span className="text-xs">
+                            <strong className="text-blue-700">Click to browse</strong> or drag and drop receipt file
+                          </span>
+                        </div>
+                      )}
+
+                      {receiptUrl ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReceiptUrl('');
+                            setReceiptAttachmentName('');
+                            setReceiptAttachmentSize('');
+                          }}
+                          className="p-1.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 transition"
+                          title="Remove receipt"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <span className="text-[10px] px-2 py-1 rounded bg-slate-100 text-slate-600 font-mono shrink-0">
+                          Browse
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 6: ENTITY LINKAGE & AUDIT */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold block">
+                  5. Optional Entity Linkage & Audit Control
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Link with Record</label>
+                    <select
+                      value={linkedEntityType}
+                      onChange={(e) => {
+                        setLinkedEntityType(e.target.value as any);
+                        setLinkedEntityId('');
+                        setLinkedEntityName('');
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 cursor-pointer"
+                    >
+                      <option value="none">No Direct Link</option>
+                      <option value="tourist">Link to Tourist Profile</option>
+                      <option value="ticket">Link to Flight Ticket</option>
+                      <option value="booking">Link to Tour Package</option>
+                      <option value="hotel">Link to Hotel Vendor</option>
+                      <option value="employee">Link to Staff / Employee</option>
+                    </select>
+                  </div>
+
+                  {linkedEntityType === 'tourist' && (
+                    <div className="sm:col-span-2">
+                      <label className="block font-semibold text-slate-700 mb-1">Select Tourist</label>
+                      <select
+                        value={linkedEntityId}
+                        onChange={(e) => {
+                          const t = tourists.find((item) => item.id === e.target.value);
+                          setLinkedEntityId(e.target.value);
+                          if (t) {
+                            setLinkedEntityName(t.fullName);
+                            if (!txnPayerPayee) setTxnPayerPayee(t.fullName);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 cursor-pointer"
+                      >
+                        <option value="">-- Choose Tourist Profile --</option>
+                        {tourists.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.fullName} ({t.nationality} - {t.passportNumber})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {linkedEntityType === 'ticket' && (
+                    <div className="sm:col-span-2">
+                      <label className="block font-semibold text-slate-700 mb-1">Select Flight Ticket</label>
+                      <select
+                        value={linkedEntityId}
+                        onChange={(e) => {
+                          const t = tickets.find((item) => item.id === e.target.value);
+                          setLinkedEntityId(e.target.value);
+                          if (t) {
+                            setLinkedEntityName(`PNR: ${t.pnr || t.bookingRef} (${t.clientName || t.touristName})`);
+                            if (!txnPayerPayee) setTxnPayerPayee(t.clientName || t.touristName || '');
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 cursor-pointer"
+                      >
+                        <option value="">-- Choose Issued Ticket --</option>
+                        {tickets.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.pnr || t.bookingRef} - {t.clientName || t.touristName} (${t.price} USD)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {linkedEntityType === 'employee' && (
+                    <div className="sm:col-span-2">
+                      <label className="block font-semibold text-slate-700 mb-1">Select Staff Member</label>
+                      <select
+                        value={linkedEntityId}
+                        onChange={(e) => {
+                          const emp = employees.find((item) => item.id === e.target.value);
+                          setLinkedEntityId(e.target.value);
+                          if (emp) {
+                            setLinkedEntityName(`${emp.name} (${emp.role})`);
+                            if (!txnPayerPayee) setTxnPayerPayee(emp.name);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 cursor-pointer"
+                      >
+                        <option value="">-- Choose Employee / Guide / Driver --</option>
+                        {employees.map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.name} - {emp.role} ({emp.departmentName || emp.departmentId})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {linkedEntityType === 'hotel' && (
+                    <div className="sm:col-span-2">
+                      <label className="block font-semibold text-slate-700 mb-1">Select Hotel Partner</label>
+                      <select
+                        value={linkedEntityId}
+                        onChange={(e) => {
+                          const h = hotels.find((item) => item.id === e.target.value);
+                          setLinkedEntityId(e.target.value);
+                          if (h) {
+                            setLinkedEntityName(h.name);
+                            if (!txnPayerPayee) setTxnPayerPayee(h.name);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 cursor-pointer"
+                      >
+                        <option value="">-- Choose Hotel Partner --</option>
+                        {hotels.map((h) => (
+                          <option key={h.id} value={h.id}>
+                            {h.name} ({h.city})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-200/60">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Recorded By</label>
+                    <input
+                      type="text"
+                      value={txnRecordedBy}
+                      onChange={(e) => setTxnRecordedBy(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Authorized / Approved By</label>
+                    <input
+                      type="text"
+                      value={txnAuthorizedBy}
+                      onChange={(e) => setTxnAuthorizedBy(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Internal Accounting Memo & Notes</label>
+                  <textarea
+                    rows={2}
+                    value={txnNotes}
+                    onChange={(e) => setTxnNotes(e.target.value)}
+                    placeholder="e.g. Cleared via CBE Swift wire, verified against hotel invoice confirmation."
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAddTxnModalOpen(false)}
-                  className="px-4 py-2 rounded-full bg-slate-100 text-slate-700 font-semibold cursor-pointer"
+                  className="px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-full bg-slate-900 text-white font-bold cursor-pointer"
+                  className="px-7 py-2.5 rounded-full bg-slate-950 hover:bg-slate-900 text-white font-bold cursor-pointer shadow-md flex items-center gap-2"
                 >
-                  Save Entry
+                  <Check className="w-4 h-4" /> Save Financial Entry
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* PROFESSIONAL TRANSACTION VOUCHER & RECEIPT VIEWER MODAL                  */}
+      {/* ========================================================================= */}
+      {activeVoucherTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden my-6 animate-in fade-in duration-200 flex flex-col max-h-[92vh]">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-blue-700" />
+                <h2 className="text-base font-serif font-bold text-slate-900">
+                  Official Accounting Voucher #{activeVoucherTxn.referenceCode}
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => printElement('printable-voucher-card', `Voucher_${activeVoucherTxn.referenceCode}`)}
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+                  title="Print Official Payment Voucher"
+                >
+                  <Printer className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setActiveVoucherTxn(null)}
+                  className="p-2 rounded-full text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div id="printable-voucher-card" className="p-6 space-y-5 text-xs overflow-y-auto flex-1">
+              {/* Voucher Top Header */}
+              <div className="flex justify-between items-start border-b border-slate-200 pb-4">
+                <div>
+                  <h3 className="font-serif font-bold text-base text-slate-950">EritreaVisit Tours & Travel</h3>
+                  <p className="text-slate-500">Accounts & Financial Control Division</p>
+                  <p className="text-slate-500">BDHO Avenue, Asmara, Eritrea</p>
+                  <p className="text-slate-500 font-mono text-[11px]">TIN: ER-109482 · Swift: ERTBAS22</p>
+                </div>
+                <div className="text-right">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold font-mono inline-block ${
+                    activeVoucherTxn.type === 'Income' ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900'
+                  }`}>
+                    {activeVoucherTxn.type === 'Income' ? 'OFFICIAL RECEIPT VOUCHER' : 'OFFICIAL PAYMENT VOUCHER'}
+                  </span>
+                  <div className="font-mono font-bold text-sm text-slate-900 mt-2">
+                    Ref: {activeVoucherTxn.referenceCode}
+                  </div>
+                  <span className="text-slate-500 block font-mono">Date: {activeVoucherTxn.date}</span>
+                  {activeVoucherTxn.receiptNumber && (
+                    <span className="text-blue-700 font-mono font-semibold block">
+                      Receipt No: #{activeVoucherTxn.receiptNumber}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Payer / Payee and Details */}
+              <div className="grid grid-cols-2 gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-slate-400 block font-bold">
+                    {activeVoucherTxn.type === 'Income' ? 'Received From (Payer)' : 'Paid To (Payee)'}
+                  </span>
+                  <p className="font-bold text-sm text-slate-900 mt-0.5">{activeVoucherTxn.payerOrPayee}</p>
+                  {activeVoucherTxn.payerPayeeType && (
+                    <p className="text-[11px] text-slate-500">{activeVoucherTxn.payerPayeeType}</p>
+                  )}
+                  {activeVoucherTxn.taxId && (
+                    <p className="text-[11px] font-mono text-slate-500">TIN/Tax: {activeVoucherTxn.taxId}</p>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-slate-400 block font-bold">
+                    Payment Method & Banking
+                  </span>
+                  <p className="font-bold text-sm text-slate-900 mt-0.5">{activeVoucherTxn.paymentMethod}</p>
+                  {activeVoucherTxn.bankAccount && (
+                    <p className="text-[11px] font-mono text-slate-600">{activeVoucherTxn.bankAccount}</p>
+                  )}
+                  <p className="text-[11px] text-slate-500 mt-0.5">Status: <strong className="text-emerald-700">{activeVoucherTxn.status}</strong></p>
+                </div>
+              </div>
+
+              {/* Description & Linkage */}
+              <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+                <span className="text-[10px] font-mono uppercase text-slate-400 block font-bold">
+                  Transaction Purpose & Category
+                </span>
+                <p className="text-sm font-semibold text-slate-900">{activeVoucherTxn.description}</p>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                    Category: {activeVoucherTxn.category}
+                  </span>
+                  {activeVoucherTxn.subCategory && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                      Sub: {activeVoucherTxn.subCategory}
+                    </span>
+                  )}
+                  {activeVoucherTxn.linkedEntityName && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 font-semibold text-[10px]">
+                      Linked: {activeVoucherTxn.linkedEntityName}
+                    </span>
+                  )}
+                </div>
+                {activeVoucherTxn.notes && (
+                  <p className="text-xs text-slate-500 italic pt-1 border-t border-slate-100">
+                    Memo: {activeVoucherTxn.notes}
+                  </p>
+                )}
+              </div>
+
+              {/* Financial Calculation Box */}
+              <div className="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400 block">
+                    Total Amount
+                  </span>
+                  <div className="text-2xl font-mono font-black text-amber-400">
+                    ${activeVoucherTxn.amountUSD.toLocaleString()} USD
+                  </div>
+                  <span className="text-xs font-mono text-slate-300">
+                    Official Nakfa: {(activeVoucherTxn.amountNFA || activeVoucherTxn.amountUSD * 15).toLocaleString()} ERN
+                  </span>
+                </div>
+
+                <div className="text-right text-xs font-mono space-y-0.5 text-slate-300">
+                  <div>Exchange Rate: 1 USD = {activeVoucherTxn.exchangeRate || 15} ERN</div>
+                  {activeVoucherTxn.taxRatePercent ? (
+                    <div>Tax ({activeVoucherTxn.taxRatePercent}%): ${activeVoucherTxn.taxAmountUSD?.toFixed(2)} USD</div>
+                  ) : (
+                    <div>Tax: 0% (Exempt)</div>
+                  )}
+                  <div className="text-emerald-400 font-bold">Settled in Full</div>
+                </div>
+              </div>
+
+              {/* Attached Receipt File Preview */}
+              {activeVoucherTxn.receiptUrl && (
+                <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase text-blue-900 font-bold flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5 text-blue-700" /> Attached Receipt Document
+                    </span>
+                    <span className="text-[10px] text-blue-700 font-mono">
+                      {activeVoucherTxn.receiptAttachmentName || 'Receipt_Doc'}
+                    </span>
+                  </div>
+
+                  {activeVoucherTxn.receiptUrl.startsWith('data:image') ? (
+                    <div className="rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
+                      <img
+                        src={activeVoucherTxn.receiptUrl}
+                        alt="Receipt Scan"
+                        className="max-h-64 mx-auto object-contain rounded-lg"
+                      />
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-white rounded-xl border border-slate-200 text-center">
+                      <FileText className="w-8 h-8 text-blue-600 mx-auto mb-1" />
+                      <p className="font-bold text-slate-900 text-xs">
+                        {activeVoucherTxn.receiptAttachmentName || 'Attached Document'}
+                      </p>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {activeVoucherTxn.receiptAttachmentSize || 'PDF Document'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Audit Sign-offs */}
+              <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-200 text-[11px]">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="text-slate-400 block text-[9px] uppercase font-mono font-bold">Prepared & Recorded By</span>
+                  <p className="font-bold text-slate-900 mt-1">{activeVoucherTxn.recordedBy}</p>
+                  <span className="text-slate-500 text-[10px]">Accounts Officer</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <span className="text-slate-400 block text-[9px] uppercase font-mono font-bold">Authorized & Approved By</span>
+                  <p className="font-bold text-slate-900 mt-1">{activeVoucherTxn.authorizedBy || 'Semere Beraki (Finance Controller)'}</p>
+                  <span className="text-emerald-700 font-bold text-[10px] flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Stamp & Certified
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -932,4 +1771,3 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
     </div>
   );
 };
-

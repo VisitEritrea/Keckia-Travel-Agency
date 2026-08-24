@@ -306,6 +306,7 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
           clients={clients}
           tickets={tickets}
           onOpenAddClient={() => setIsAddClientModalOpen(true)}
+          onAddClient={onAddClient}
           onOpenIssueTicketForClient={(client) => {
             setClientForIssuance(client);
             setIsIssueModalOpen(true);
@@ -590,6 +591,10 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
                                   Pass: {t.touristPassport}
                                 </span>
                               )}
+                              <div className="mt-1 flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50/90 px-1.5 py-0.5 rounded-md border border-blue-200/60 w-fit">
+                                <span>Agent:</span>
+                                <span className="font-bold">{t.agent || t.salesAgentName || 'Sales Agent'}</span>
+                              </div>
                             </td>
 
                             {/* Airline & Route */}

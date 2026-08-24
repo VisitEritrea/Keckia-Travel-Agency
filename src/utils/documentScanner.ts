@@ -1,3 +1,5 @@
+import { runTesseractOcr } from './tesseractOcr';
+
 export interface ScannedCompanionData {
   fullName?: string;
   relationship?: string;
@@ -477,13 +479,37 @@ export function normalizeNationality(val?: string | null): string {
 }
 
 /**
- * Scan an uploaded image or PDF file using the Gemini AI OCR backend,
- * strictly returning only extracted fields and leaving absent fields blank.
+ * Scan an uploaded image or PDF file using Tesseract OCR + gImageReader Optical Engine,
+ * with backend verification, strictly returning extracted fields and leaving absent fields blank.
  */
 export async function scanDocumentWithAI(
   file: File
 ): Promise<{ success: boolean; data: ScannedTouristData; message: string }> {
-  // 1. Read file as base64
+  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  // If it's an image, run Tesseract OCR directly
+  if (!isPdf) {
+    try {
+      const tesseractResult = await runTesseractOcr(file);
+      if (
+        tesseractResult &&
+        tesseractResult.data &&
+        (tesseractResult.data.fullName || tesseractResult.data.passportNumber || tesseractResult.data.nationality)
+      ) {
+        return {
+          success: true,
+          data: tesseractResult.data,
+          message: `Successfully extracted passport & biometric data using Tesseract OCR (Confidence: ${Math.round(
+            tesseractResult.confidence
+          )}%)`,
+        };
+      }
+    } catch (ocrErr) {
+      console.warn('Local Tesseract OCR attempt notice:', ocrErr);
+    }
+  }
+
+  // 1. Read file as base64 for fallback or PDF processing
   const base64Data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
@@ -491,7 +517,6 @@ export async function scanDocumentWithAI(
     reader.readAsDataURL(file);
   });
 
-  const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
   const mimeType = file.type || (isPdf ? 'application/pdf' : 'image/jpeg');
 
   try {
