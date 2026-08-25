@@ -59,6 +59,7 @@ import {
   normalizeGender,
   normalizeNationality,
 } from '../../utils/documentScanner';
+import { AbbyyFineReaderPassportModal } from '../common/AbbyyFineReaderPassportModal';
 
 export interface FamilyMemberRecord extends CompanionMember {
   name?: string;
@@ -107,6 +108,10 @@ export interface TouristExpedition {
   companions?: CompanionMember[];
 
   // Itinerary
+  startDate?: string;
+  endDate?: string;
+  tourStartDate?: string;
+  tourEndDate?: string;
   daysPlanned: number;
   routeSummary: string;
   schedule: TouristItineraryDay[];
@@ -345,6 +350,7 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
   );
 
   // Passport OCR state for lead & party
+  const [isAbbyyModalOpen, setIsAbbyyModalOpen] = useState(false);
   const [passportDocName, setPassportDocName] = useState<string>(initialExpedition?.passportDocName || '');
   const [passportDocUrl, setPassportDocUrl] = useState<string>(initialExpedition?.passportDocUrl || '');
   const [passportVerified, setPassportVerified] = useState<boolean>(initialExpedition?.passportVerified ?? false);
@@ -392,8 +398,21 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
   );
 
   // ---------------------------------------------------------------------------
-  // STEP 2: BUILD CUSTOM ITINERARY (DAY-BY-DAY)
+  // STEP 2: BUILD CUSTOM ITINERARY (DAY-BY-DAY) & TOUR DATES
   // ---------------------------------------------------------------------------
+  const [tourStartDate, setTourStartDate] = useState<string>(
+    initialExpedition?.tourStartDate ||
+      initialExpedition?.startDate ||
+      initialExpedition?.checkIn ||
+      '2026-08-25'
+  );
+  const [tourEndDate, setTourEndDate] = useState<string>(
+    initialExpedition?.tourEndDate ||
+      initialExpedition?.endDate ||
+      initialExpedition?.checkOut ||
+      '2026-08-29'
+  );
+
   const [routeSummary, setRouteSummary] = useState<string>(
     initialExpedition?.routeSummary ||
       'Asmara Modernist Architecture → Segheneyti → Qohaito Ruins → Massawa Old Port & Green Island'
@@ -409,11 +428,90 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
           mealPlan: (d.mealPlan as any) || 'Half Board',
           transport: (d as any).transportMode || d.transport || 'Toyota Land Cruiser V8 Prado',
         }))
-      : PRESET_ITINERARIES[1].days
+      : [
+          {
+            dayNumber: 1,
+            title: 'UNESCO Asmara Architectural Survey & Historic Railways',
+            location: 'Asmara (Central / Maekel)',
+            lodging: 'Hotel Asmara Palace',
+            mealPlan: 'Breakfast',
+            transport: 'Toyota Land Cruiser V8 Prado (Plate: ER-2-18492)',
+            activities: 'Field inspection of Fiat Tagliero, Cinema Impero, and steam locomotive depot.',
+          },
+          {
+            dayNumber: 2,
+            title: 'Segheneyti Giant Sycamore & Pre-Aksumite Qohaito Plateau',
+            location: 'Segheneyti & Qohaito Plateau (Debub)',
+            lodging: 'Adi Keyh Archaeological Mountain Lodge',
+            mealPlan: 'Full Board',
+            transport: '4WD Expedition Convoy',
+            activities: 'Rock art surveying at Adi Alauti canyon, Temple of Mariam Wakiro, and Egyptian Tomb excavations.',
+          },
+          {
+            dayNumber: 3,
+            title: 'Metera Stele & Descent via Filfil Solomuna Cloud Forest',
+            location: 'Metera (Senafe) & Filfil Solomuna Escarpment',
+            lodging: 'Massawa Grand Dahlak Hotel',
+            mealPlan: 'Half Board',
+            transport: 'Toyota Land Cruiser V8 Prado',
+            activities: 'Highland flora birdwatching, lush rainforest descent, and arrival at Red Sea port.',
+          },
+          {
+            dayNumber: 4,
+            title: 'Ottoman Old Town Massawa & Coral Reef Survey',
+            location: 'Massawa Harbor & Sheikh Said Island',
+            lodging: 'Massawa Grand Dahlak Hotel',
+            mealPlan: 'Full Board',
+            transport: 'Marine Speedboat Vessel & 4WD',
+            activities: 'Coral biodiversity monitoring and archival photography of Turkish-Ottoman palaces.',
+          },
+        ]
   );
   const [itineraryNotes, setItineraryNotes] = useState<string>(
     initialExpedition?.customItinerary?.notes || 'All regional travel permits for Debub and Semienawi Keyih Bahri pre-authorized.'
   );
+
+  // Synchronize start date changes
+  const handleStartDateChange = (newStart: string) => {
+    setTourStartDate(newStart);
+    setCheckIn(newStart);
+    if (newStart && scheduleDays.length > 0) {
+      try {
+        const parts = newStart.split('-');
+        if (parts.length === 3) {
+          const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          d.setDate(d.getDate() + scheduleDays.length);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const newEnd = `${yyyy}-${mm}-${dd}`;
+          setTourEndDate(newEnd);
+          setCheckOut(newEnd);
+        }
+      } catch (err) {
+        console.warn('Date calculation err', err);
+      }
+    }
+  };
+
+  const handleEndDateChange = (newEnd: string) => {
+    setTourEndDate(newEnd);
+    setCheckOut(newEnd);
+  };
+
+  const getFormattedDayDate = (startDateStr: string, dayIndex: number): string | null => {
+    if (!startDateStr) return null;
+    try {
+      const parts = startDateStr.split('-');
+      if (parts.length !== 3) return null;
+      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      if (isNaN(d.getTime())) return null;
+      d.setDate(d.getDate() + dayIndex);
+      return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return null;
+    }
+  };
 
   // ---------------------------------------------------------------------------
   // STEP 3: HOTEL & LODGING RESERVATIONS
@@ -423,8 +521,8 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
     initialExpedition?.hotelId || (hotels[0]?.id ?? 'hotel-001')
   );
   const [roomType, setRoomType] = useState<string>(initialExpedition?.roomType || 'Deluxe Suite with Balcony');
-  const [checkIn, setCheckIn] = useState<string>(initialExpedition?.checkIn || '2026-08-25');
-  const [checkOut, setCheckOut] = useState<string>(initialExpedition?.checkOut || '2026-08-29');
+  const [checkIn, setCheckIn] = useState<string>(initialExpedition?.checkIn || initialExpedition?.startDate || '2026-08-25');
+  const [checkOut, setCheckOut] = useState<string>(initialExpedition?.checkOut || initialExpedition?.endDate || '2026-08-29');
   const [roomsCount, setRoomsCount] = useState<number>(initialExpedition?.roomsCount || 1);
   const [pricePerNightUSD, setPricePerNightUSD] = useState<number>(initialExpedition?.pricePerNightUSD || 160);
   const [hotelBookingStatus, setHotelBookingStatus] = useState<'Confirmed' | 'Pending'>(
@@ -1026,7 +1124,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
       familyMembers: companions,
       companions: companions,
 
-      // Itinerary
+      // Itinerary & Tour Dates
+      startDate: tourStartDate || checkIn,
+      endDate: tourEndDate || checkOut,
+      tourStartDate: tourStartDate || checkIn,
+      tourEndDate: tourEndDate || checkOut,
       daysPlanned: scheduleDays.length,
       routeSummary,
       schedule: scheduleDays,
@@ -1041,8 +1143,8 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
       hotelId: currentSelectedHotel?.id || 'hotel-001',
       hotelName: currentSelectedHotel?.name || 'Hotel Asmara Palace',
       roomType,
-      checkIn,
-      checkOut,
+      checkIn: tourStartDate || checkIn,
+      checkOut: tourEndDate || checkOut,
       roomsCount,
       pricePerNightUSD,
       totalHotelUSD,
@@ -1054,8 +1156,8 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
               hotelId: currentSelectedHotel?.id || 'hotel-001',
               hotelName: currentSelectedHotel?.name || 'Hotel Asmara Palace',
               roomType,
-              checkIn,
-              checkOut,
+              checkIn: tourStartDate || checkIn,
+              checkOut: tourEndDate || checkOut,
               nights: nightsCount,
               roomsCount,
               totalUSD: totalHotelUSD,
@@ -1278,6 +1380,14 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                   </div>
 
                   <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsAbbyyModalOpen(true)}
+                      className="text-xs text-white font-bold px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                    >
+                      <ScanLine className="w-3.5 h-3.5" />
+                      ABBYY® FineReader Engine
+                    </button>
                     {(leadName || passportNumber || email || phone || scannedFileDetails) && (
                       <button
                         type="button"
@@ -1944,31 +2054,89 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
           )}
 
           {/* =================================================================== */}
-          {/* STEP 2: BUILD CUSTOM ITINERARY (DAY-BY-DAY PLANNER)                 */}
+          {/* STEP 2: BUILD CUSTOM ITINERARY (DAY-BY-DAY PLANNER) & TOUR DATES    */}
           {/* =================================================================== */}
           {currentStep === 2 && (
             <div className="space-y-6 animate-in fade-in duration-150">
-              {/* Preset Template Quick Loader */}
-              <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-600" />
-                    Load Curated Eritrea Expedition Templates (1-Click Fill)
-                  </span>
-                  <span className="text-[10px] text-amber-800 font-mono font-semibold">Customizable after loading</span>
+              {/* Tour Dates & Timeframe Configuration */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/50 border border-amber-200/80 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-amber-200/60">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold shadow-xs">
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Expedition Tour Dates & Schedule Duration
+                      </h4>
+                      <p className="text-[11px] text-slate-600 font-medium">
+                        Specify tour start and end dates. Day-by-day itineraries and lodging dates synchronize automatically.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full bg-white border border-amber-300 text-amber-950 text-xs font-bold font-mono shadow-2xs">
+                      {scheduleDays.length} {scheduleDays.length === 1 ? 'Day' : 'Days'} / {Math.max(1, scheduleDays.length - 1)} Nights
+                    </span>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {PRESET_ITINERARIES.map((tpl, i) => (
-                    <button
-                      key={tpl.title}
-                      type="button"
-                      onClick={() => handleLoadPresetItinerary(i)}
-                      className="p-2.5 rounded-xl bg-white border border-amber-200 hover:border-amber-400 hover:bg-amber-100/50 text-left transition cursor-pointer flex flex-col justify-between"
-                    >
-                      <span className="text-xs font-bold text-slate-900 line-clamp-1">{tpl.title}</span>
-                      <span className="text-[10px] text-slate-500 line-clamp-2 mt-1">{tpl.summary}</span>
-                    </button>
-                  ))}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Tour Start Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={tourStartDate}
+                      onChange={(e) => handleStartDateChange(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-amber-200 text-xs font-semibold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Tour End Date <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={tourEndDate}
+                      onChange={(e) => handleEndDateChange(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-amber-200 text-xs font-semibold text-slate-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Itinerary Day Slots
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (scheduleDays.length > 1) {
+                            handleRemoveDay(scheduleDays.length - 1);
+                          }
+                        }}
+                        disabled={scheduleDays.length <= 1}
+                        className="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 disabled:opacity-40 transition cursor-pointer shadow-2xs"
+                        title="Remove last day"
+                      >
+                        -1 Day
+                      </button>
+                      <span className="flex-1 text-center py-2 px-2 rounded-xl bg-white border border-amber-200 text-xs font-bold text-slate-900 font-mono shadow-2xs">
+                        {scheduleDays.length} {scheduleDays.length === 1 ? 'Day' : 'Days'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddDay}
+                        className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer shadow-2xs"
+                        title="Add next day"
+                      >
+                        +1 Day
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2009,26 +2177,33 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                 </div>
 
                 <div className="space-y-3">
-                  {scheduleDays.map((day, idx) => (
+                  {scheduleDays.map((day, idx) => {
+                    const formattedDayDate = getFormattedDayDate(tourStartDate, idx);
+                    return (
                     <div
                       key={day.dayNumber}
                       className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3 hover:border-slate-300 transition"
                     >
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="w-7 h-7 rounded-xl bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shadow-2xs">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="w-7 h-7 rounded-xl bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shadow-2xs shrink-0">
                             D{day.dayNumber}
                           </span>
+                          {formattedDayDate && (
+                            <span className="text-[10px] font-mono font-bold text-amber-900 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-md">
+                              {formattedDayDate}
+                            </span>
+                          )}
                           <input
                             type="text"
                             value={day.title}
                             onChange={(e) => handleUpdateDay(idx, { title: e.target.value })}
                             placeholder="Day Title / Main Highlights"
-                            className="text-xs font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-amber-500 focus:outline-hidden px-1 py-0.5 w-72 sm:w-96"
+                            className="text-xs font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-amber-500 focus:outline-hidden px-1 py-0.5 w-64 sm:w-80"
                           />
                         </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 shrink-0">
                           <button
                             type="button"
                             onClick={() => handleMoveDay(idx, 'up')}
@@ -2126,7 +2301,8 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                         />
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
                 </div>
               </div>
             </div>
@@ -2588,6 +2764,20 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
           </div>
         </div>
       </div>
+
+      <AbbyyFineReaderPassportModal
+        isOpen={isAbbyyModalOpen}
+        onClose={() => setIsAbbyyModalOpen(false)}
+        onApplyData={(data, previewUrl, docName) => {
+          applyExtractedData(
+            data,
+            docName || 'passport_scan.jpg',
+            data.detectedDocumentType || 'ABBYY FineReader Verified Passport',
+            previewUrl
+          );
+        }}
+        title="ABBYY® FineReader Engine — Tourist Passport & Dossier OCR"
+      />
     </div>
   );
 };

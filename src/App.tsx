@@ -138,18 +138,235 @@ export default function App() {
     return persistedClients || [];
   }, [persistedClients]);
 
+  // Unified tourists, ticketing clients, and expedition travelers list for cross-module integration
+  const allTouristsAndClients = useMemo<TouristProfile[]>(() => {
+    const map = new Map<string, TouristProfile>();
+
+    // 1. Add all from tourists collection
+    (tourists || []).forEach((t) => {
+      if (t && t.id) {
+        map.set(t.id, t);
+        if (t.passportNumber) {
+          map.set(`pp_${t.passportNumber.trim().toUpperCase()}`, t);
+        }
+      }
+    });
+
+    // 2. Merge all ticketing clients
+    (ticketingClients || []).forEach((c) => {
+      const ppKey = c.passportNumber ? `pp_${c.passportNumber.trim().toUpperCase()}` : null;
+      const existing = map.get(c.id) || (ppKey ? map.get(ppKey) : null);
+      if (existing) {
+        const merged: TouristProfile = {
+          ...existing,
+          fullName: existing.fullName || c.fullName,
+          phone: existing.phone || c.phone,
+          email: existing.email || c.email,
+          passportNumber: existing.passportNumber || c.passportNumber,
+          passportExpiry: existing.passportExpiry || c.passportExpiry,
+          nationality: existing.nationality || c.nationality,
+          occupation: existing.occupation || c.occupation,
+        };
+        map.set(existing.id, merged);
+      } else {
+        const isVip = c.vipStatus || c.category === 'VIP Traveler';
+        const clientProfile: TouristProfile = {
+          id: c.id.startsWith('tourist-') ? c.id : `tourist-${c.id}`,
+          fullName: c.fullName,
+          email: c.email || '',
+          phone: c.phone || '',
+          passportNumber: c.passportNumber || '',
+          passportExpiry: c.passportExpiry || '',
+          nationality: c.nationality || 'International',
+          dateOfBirth: c.dateOfBirth || '',
+          gender: (c.gender === 'Female' ? 'Female' : 'Male') as any,
+          occupation: c.occupation || 'International Traveler',
+          dietaryRequirements: '',
+          medicalNotes: '',
+          travelHistoryCount: c.totalBookingsCount || 1,
+          status: (isVip ? 'VIP' : 'Active Traveler') as any,
+          avatar: c.avatar || '',
+          notes: `Ticketing Client: ${c.companyOrOrg || c.notes || 'Registered Client Profile'}`,
+          preferredLanguage: 'English',
+        };
+        map.set(clientProfile.id, clientProfile);
+        if (ppKey) map.set(ppKey, clientProfile);
+      }
+    });
+
+    // 3. Merge from expeditions (Lead + Companions)
+    (expeditions || []).forEach((exp) => {
+      const leadId = `tourist-${exp.id}`;
+      const leadPpKey = exp.passportNumber ? `pp_${exp.passportNumber.trim().toUpperCase()}` : null;
+      if (!map.has(leadId) && (!leadPpKey || !map.has(leadPpKey))) {
+        const leadProf: TouristProfile = {
+          id: leadId,
+          fullName: exp.leadName,
+          email: exp.email || '',
+          phone: exp.phone || '',
+          passportNumber: exp.passportNumber || '',
+          passportExpiry: exp.passportExpiry || '',
+          nationality: exp.nationality || 'International',
+          dateOfBirth: exp.dateOfBirth || '',
+          gender: exp.gender || 'Male',
+          occupation: exp.occupation || 'International Traveler',
+          dietaryRequirements: exp.dietary || '',
+          medicalNotes: exp.medicalNotes || '',
+          travelHistoryCount: 1,
+          status: exp.isVip ? 'VIP' : 'Active Traveler',
+          avatar: exp.avatar || '',
+          notes: `Expedition: ${exp.partyTitle || exp.routeSummary}`,
+          preferredLanguage: exp.preferredLanguage || 'English',
+        };
+        map.set(leadId, leadProf);
+        if (leadPpKey) map.set(leadPpKey, leadProf);
+      }
+
+      (exp.companions || exp.familyMembers || []).forEach((m, idx) => {
+        const compId = `tourist-${exp.id}-m${idx + 1}`;
+        const compPpKey = m.passportNumber ? `pp_${m.passportNumber.trim().toUpperCase()}` : null;
+        if (!map.has(compId) && (!compPpKey || !map.has(compPpKey))) {
+          const compProf: TouristProfile = {
+            id: compId,
+            fullName: m.fullName || (m as any).name || 'Companion Traveler',
+            email: exp.email || '',
+            phone: exp.phone || '',
+            passportNumber: m.passportNumber || '',
+            passportExpiry: m.passportExpiry || '',
+            nationality: m.nationality || exp.nationality || 'International',
+            dateOfBirth: m.dateOfBirth || (m as any).dob || '',
+            gender: m.gender === 'Female' ? 'Female' : 'Male',
+            occupation: m.occupation || m.relationship || 'Traveler',
+            dietaryRequirements: m.dietaryRequirements || (m as any).dietary || '',
+            medicalNotes: m.medicalNotes || '',
+            travelHistoryCount: 1,
+            status: 'Active Traveler',
+            avatar: '',
+            notes: `Companion with ${exp.leadName}`,
+            preferredLanguage: 'English',
+          };
+          map.set(compId, compProf);
+          if (compPpKey) map.set(compPpKey, compProf);
+        }
+      });
+    });
+
+    const result: TouristProfile[] = [];
+    const seen = new Set<string>();
+    for (const [key, val] of map.entries()) {
+      if (!key.startsWith('pp_') && !seen.has(val.id)) {
+        seen.add(val.id);
+        result.push(val);
+      }
+    }
+    return result;
+  }, [tourists, ticketingClients, expeditions]);
+
   const handleAddTicketingClient = (newClient: TicketingClient) => {
     setPersistedClients((prev) => [newClient, ...(prev || [])]);
+
+    const isVip = newClient.vipStatus || newClient.category === 'VIP Traveler';
+    const clientTouristProfile: TouristProfile = {
+      id: newClient.id.startsWith('tourist-') ? newClient.id : `tourist-${newClient.id}`,
+      fullName: newClient.fullName,
+      email: newClient.email || '',
+      phone: newClient.phone || '',
+      passportNumber: newClient.passportNumber || '',
+      passportExpiry: newClient.passportExpiry || '',
+      nationality: newClient.nationality || 'International',
+      dateOfBirth: newClient.dateOfBirth || '',
+      gender: (newClient.gender === 'Female' ? 'Female' : 'Male') as any,
+      occupation: newClient.occupation || 'International Traveler',
+      dietaryRequirements: '',
+      medicalNotes: '',
+      travelHistoryCount: (newClient.totalBookingsCount || 0) + 1,
+      status: (isVip ? 'VIP' : 'Active Traveler') as any,
+      avatar: newClient.avatar || '',
+      notes: `Ticketing Client Dossier: ${newClient.notes || newClient.companyOrOrg || 'Client Profile'}`,
+      preferredLanguage: 'English',
+    };
+
+    setTourists((prev) => {
+      const idx = prev.findIndex(
+        (t) =>
+          t.id === clientTouristProfile.id ||
+          (t.passportNumber && t.passportNumber === clientTouristProfile.passportNumber)
+      );
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], ...clientTouristProfile };
+        return copy;
+      }
+      return [clientTouristProfile, ...prev];
+    });
+
+    // Auto-create official VoA sponsorship draft for Visa & Permits desk
+    const voaDoc: VisaOnArrivalDoc = {
+      id: `voa-client-${newClient.id}`,
+      docNumber: `VE-VOA-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      referenceNumber: `REF-VOA-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      touristId: clientTouristProfile.id,
+      touristName: newClient.fullName,
+      passportNumber: newClient.passportNumber || '',
+      passportExpiry: newClient.passportExpiry || '',
+      gender: newClient.gender || 'Male',
+      nationality: newClient.nationality || 'International',
+      occupation: newClient.occupation || 'International Traveler',
+      job: newClient.occupation || 'International Traveler',
+      tourPackageTitle: 'Eritrea Visit & Heritage Tour',
+      arrivalDate: new Date().toISOString().split('T')[0],
+      departureDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      entryPort: 'Asmara International Airport (ASM)',
+      localSponsorName: 'Keckia Travel Agency',
+      localSponsorLicense: 'LIC/TOUR/MOCT-88921-ET',
+      hotelArrangements: 'Hotel Asmara Palace',
+      issuanceStatus: 'Approved',
+      generatedAt: new Date().toISOString().split('T')[0],
+      letterDate: new Date().toISOString().split('T')[0],
+      officialNotes: `Visa on Arrival Sponsorship issued for registered client ${newClient.fullName}.`,
+      signatoryName: 'Helen Berhe',
+      signatoryTitle: 'Head of Consular & Compliance Affairs',
+      touristsManifest: [
+        {
+          name: newClient.fullName,
+          passportNo: newClient.passportNumber || '',
+          gender: newClient.gender || 'Male',
+          nationality: newClient.nationality || 'International',
+          job: newClient.occupation || 'International Traveler',
+        },
+      ],
+    };
+
+    setVisaDocs((prev) => {
+      const idx = prev.findIndex((v) => v.id === voaDoc.id || (v.passportNumber && v.passportNumber === voaDoc.passportNumber));
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = voaDoc;
+        return copy;
+      }
+      return [voaDoc, ...prev];
+    });
+
     const alert: NotificationItem = {
       id: `notif-${Date.now()}`,
-      title: `New Ticketing Client Registered`,
-      message: `Client ${newClient.fullName} (${newClient.clientCode || 'Client'}) registered with verified passport profile.`,
+      title: `Client Integrated with Visa & Permit Desk`,
+      message: `Client ${newClient.fullName} (${newClient.clientCode || 'Client'}) registered and synchronized to Visa on Arrival & Regional Permits.`,
       timestamp: 'Just now',
       read: false,
       priority: 'normal',
       type: 'permit_issued',
     };
     setNotifications((prev) => [alert, ...prev]);
+  };
+
+  const handleUpdateTicketingClient = (updatedClient: TicketingClient) => {
+    setPersistedClients((prev) =>
+      (prev || []).map((c) => (c.id === updatedClient.id ? updatedClient : c))
+    );
+  };
+
+  const handleDeleteTicketingClient = (clientId: string) => {
+    setPersistedClients((prev) => (prev || []).filter((c) => c.id !== clientId));
   };
 
   // Global Modals State
@@ -902,10 +1119,113 @@ export default function App() {
   // Handlers for Tourist Profiles
   const handleAddTourist = (newTourist: TouristProfile) => {
     setTourists((prev) => [newTourist, ...prev]);
+
+    // Auto-integrate with Visa on Arrival
+    const voaDoc: VisaOnArrivalDoc = {
+      id: `voa-tourist-${newTourist.id}`,
+      docNumber: `VOA-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      referenceNumber: `REF-VOA-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      touristId: newTourist.id,
+      touristName: newTourist.fullName,
+      passportNumber: newTourist.passportNumber || 'Pending',
+      passportExpiry: newTourist.passportExpiry || '',
+      gender: newTourist.gender || 'Male',
+      nationality: newTourist.nationality || 'International',
+      occupation: newTourist.occupation || 'International Traveler',
+      job: newTourist.occupation || 'International Traveler',
+      tourPackageTitle: `${newTourist.fullName} Tour Dossier`,
+      arrivalDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      departureDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      entryPort: 'Asmara International Airport (ASM)',
+      localSponsorName: 'EritreaVisit Tours & Travel / Keckia Travel Agency',
+      localSponsorLicense: 'LIC/TOUR/MOCT-88921-ET',
+      hotelArrangements: 'Hotel Asmara Palace',
+      issuanceStatus: 'Approved',
+      generatedAt: new Date().toISOString().split('T')[0],
+      letterDate: new Date().toISOString().split('T')[0],
+      officialNotes: `Auto-generated Consular Visa on Arrival Guarantee issued for ${newTourist.fullName}.`,
+      signatoryName: 'Helen Berhe',
+      signatoryTitle: 'Head of Consular & Compliance Affairs',
+      touristsManifest: [
+        {
+          name: newTourist.fullName,
+          passportNo: newTourist.passportNumber || 'Pending',
+          gender: newTourist.gender || 'Male',
+          nationality: newTourist.nationality || 'International',
+          job: newTourist.occupation || 'International Traveler',
+        },
+      ],
+    };
+
+    setVisaDocs((prev) => {
+      const exists = prev.some((v) => v.id === voaDoc.id || (v.passportNumber === newTourist.passportNumber && newTourist.passportNumber && newTourist.passportNumber !== 'Pending'));
+      if (exists) return prev;
+      return [voaDoc, ...prev];
+    });
+
+    // Auto-integrate with Regional Travel Permit
+    const permitDoc: RegionalPermitDoc = {
+      id: `pmt-tourist-${newTourist.id}`,
+      permitNumber: `PERMIT-MOT-2026-${Math.floor(100 + Math.random() * 900)}`,
+      referenceNumber: `REF-MOT-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      zoneName: 'Asmara → Massawa → Qohaito & Central Highlands',
+      zoneType: 'Heritage Park',
+      tourScheduleId: 'sch-custom',
+      tourPackageTitle: `${newTourist.fullName} Expedition Dossier`,
+      leadGuideName: 'Dawit Haile',
+      leadGuidePhone: '+291 7 112233',
+      leadGuideId: 'MOT-GD-0012',
+      guideLicenseNo: 'MOT-GD-0012',
+      touristNames: [newTourist.fullName],
+      touristPassports: [newTourist.passportNumber || 'Pending'],
+      validFrom: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      validTo: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+      vehiclePlate: 'ER-2-04981',
+      vehicleType: 'Toyota Land Cruiser 4WD',
+      hotelName: 'Hotel Asmara Palace',
+      authorityOffice: 'ሚኒስትሪ ቱሪዝም ማእከል ሓበሬታ (Ministry of Tourism Information Center)',
+      status: 'Active',
+      specialClearanceCode: `CLR-${Date.now().toString().slice(-6)}`,
+      emergencyRadioFreq: '146.520 MHz (VHF Ch. 4)',
+      issuedAt: new Date().toISOString().split('T')[0],
+      letterDate: new Date().toISOString().split('T')[0],
+      touristsManifest: [
+        {
+          number: 1,
+          name: newTourist.fullName,
+          nationality: newTourist.nationality || 'International',
+          passportNumber: newTourist.passportNumber || 'Pending',
+          sex: newTourist.gender || 'Male',
+          tourDate: `${new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]} - ${new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0]}`,
+          tourPlace: 'Asmara, Debub Highlands & Red Sea Port',
+          hotel: 'Hotel Asmara Palace',
+        },
+      ],
+      driversManifest: [
+        {
+          driverName: 'Yemane Beraki',
+          phoneNumber: '+291 7 556677',
+          phone: '+291 7 556677',
+          licenseNumber: 'TS-44012',
+          taseraNo: 'TS-44012',
+          vehicleType: 'Toyota Land Cruiser 4WD',
+          carType: 'Toyota Land Cruiser 4WD',
+          plateNumber: 'ER-2-04981',
+          carPlate: 'ER-2-04981',
+        },
+      ],
+    };
+
+    setPermits((prev) => {
+      const exists = prev.some((p) => p.id === permitDoc.id);
+      if (exists) return prev;
+      return [permitDoc, ...prev];
+    });
+
     const alert: NotificationItem = {
       id: `notif-${Date.now()}`,
-      title: `New Tourist Dossier Created`,
-      message: `${newTourist.fullName} (${newTourist.nationality}) registered. Passport: ${newTourist.passportNumber}.`,
+      title: `New Tourist Dossier & Visa/Permits Synced`,
+      message: `${newTourist.fullName} (${newTourist.nationality}) registered. Visa on Arrival sponsorship and Regional Travel Permit auto-generated.`,
       timestamp: 'Just now',
       read: false,
       priority: 'normal',
@@ -1423,7 +1743,7 @@ export default function App() {
 
           {effectiveTab === 'documents' && (
             <VisaPermitGeneratorView
-              tourists={tourists}
+              tourists={allTouristsAndClients}
               packages={packages}
               schedules={schedules}
               vehicles={vehicles}
@@ -1436,13 +1756,14 @@ export default function App() {
               onSaveVoADoc={handleSaveVoADoc}
               onSavePermitDoc={handleSavePermitDoc}
               onApproveVoADoc={(permissions.can.approveIssue || canWrite(role, 'documents') || canEditRecords) ? handleApproveVoADoc : undefined}
+              onAddTourist={handleAddTourist}
             />
           )}
 
           {effectiveTab === 'tickets' && (
             <TicketManagementView
               tickets={tickets}
-              tourists={tourists}
+              tourists={allTouristsAndClients}
               schedules={schedules}
               clients={ticketingClients}
               canEdit={canWrite(role, 'tickets') || canEditRecords}
@@ -1451,6 +1772,8 @@ export default function App() {
               onUpdateTicketStatus={handleUpdateTicketStatus}
               onRecordPayment={handleRecordTicketPayment}
               onAddClient={handleAddTicketingClient}
+              onUpdateClient={handleUpdateTicketingClient}
+              onDeleteClient={handleDeleteTicketingClient}
             />
           )}
 

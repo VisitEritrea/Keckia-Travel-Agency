@@ -23,17 +23,22 @@ import {
   AlertTriangle,
   UserCheck,
   ScanLine,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 import { TicketingClient, Ticket, ClientCategory } from '../../types';
 import { exportToCSV } from '../../utils/exportUtils';
 import { formatToDMY } from '../../utils/dateUtils';
-import { GImageReaderPassportModal } from './GImageReaderPassportModal';
+import { AbbyyFineReaderPassportModal } from '../common/AbbyyFineReaderPassportModal';
+import { EditTicketingClientModal } from './EditTicketingClientModal';
 
 interface ClientDirectoryViewProps {
   clients: TicketingClient[];
   tickets: Ticket[];
   onOpenAddClient: () => void;
   onAddClient?: (client: TicketingClient) => void;
+  onUpdateClient?: (client: TicketingClient) => void;
+  onDeleteClient?: (clientId: string) => void;
   onOpenIssueTicketForClient?: (client: TicketingClient) => void;
   onViewTicketPass?: (ticket: Ticket) => void;
 }
@@ -54,6 +59,8 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
   tickets = [],
   onOpenAddClient,
   onAddClient,
+  onUpdateClient,
+  onDeleteClient,
   onOpenIssueTicketForClient,
   onViewTicketPass,
 }) => {
@@ -61,7 +68,8 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<ClientCategory | 'All'>('All');
   const [selectedClientId, setSelectedClientId] = useState<string>(clients[0]?.id || '');
   const [selectedDocPreview, setSelectedDocPreview] = useState<{ name: string; url?: string } | null>(null);
-  const [isGImageReaderOpen, setIsGImageReaderOpen] = useState(false);
+  const [isAbbyyScannerOpen, setIsAbbyyScannerOpen] = useState(false);
+  const [clientToEdit, setClientToEdit] = useState<TicketingClient | null>(null);
 
   const filteredClients = clients.filter((c) => {
     const matchesCategory = selectedCategory === 'All' || c.category === selectedCategory;
@@ -156,10 +164,10 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
 
         <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => setIsGImageReaderOpen(true)}
-            className="px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-600/20"
+            onClick={() => setIsAbbyyScannerOpen(true)}
+            className="px-4 py-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-red-600/20"
           >
-            <ScanLine className="w-4 h-4 text-blue-200" /> Passport OCR (gImageReader)
+            <ScanLine className="w-4 h-4 text-white" /> ABBYY® FineReader OCR
           </button>
 
           <button
@@ -397,7 +405,27 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {onUpdateClient && (
+                      <button
+                        onClick={() => setClientToEdit(activeClient)}
+                        className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <Edit className="w-3.5 h-3.5 text-blue-600" /> Edit Client
+                      </button>
+                    )}
+                    {onDeleteClient && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete ${activeClient.fullName}?`)) {
+                            onDeleteClient(activeClient.id);
+                          }
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                      </button>
+                    )}
                     {onOpenIssueTicketForClient && (
                       <button
                         onClick={() => onOpenIssueTicketForClient(activeClient)}
@@ -695,10 +723,31 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
         </div>
       )}
 
-      {/* Tesseract OCR + gImageReader Passport Scanner Modal */}
-      <GImageReaderPassportModal
-        isOpen={isGImageReaderOpen}
-        onClose={() => setIsGImageReaderOpen(false)}
+      {/* Edit Client Modal */}
+      {clientToEdit && (
+        <EditTicketingClientModal
+          client={clientToEdit}
+          isOpen={Boolean(clientToEdit)}
+          onClose={() => setClientToEdit(null)}
+          onUpdateClient={(updated) => {
+            if (onUpdateClient) onUpdateClient(updated);
+            setClientToEdit(null);
+          }}
+          onDeleteClient={
+            onDeleteClient
+              ? (id) => {
+                  onDeleteClient(id);
+                  setClientToEdit(null);
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {/* ABBYY FineReader Engine Passport Scanner Modal */}
+      <AbbyyFineReaderPassportModal
+        isOpen={isAbbyyScannerOpen}
+        onClose={() => setIsAbbyyScannerOpen(false)}
         onApplyData={(data, previewUrl, docName) => {
           if (onAddClient) {
             const randomSuffix = Math.floor(1000 + Math.random() * 9000);

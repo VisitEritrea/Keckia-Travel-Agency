@@ -640,6 +640,7 @@ export interface TicketingClient {
   totalBookingsCount?: number;
   totalSpentUSD?: number;
   vipStatus?: boolean;
+  occupation?: string;
   notes?: string;
   avatar?: string;
   passportDocumentUrl?: string;

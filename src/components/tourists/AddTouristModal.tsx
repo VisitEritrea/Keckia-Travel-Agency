@@ -26,6 +26,7 @@ import {
   SampleDocument,
   ScannedTouristData,
 } from '../../utils/documentScanner';
+import { AbbyyFineReaderPassportModal } from '../common/AbbyyFineReaderPassportModal';
 import { readAndCompressImage, readFileAsDataUrlCapped } from '../../utils/imageUpload';
 
 interface AddTouristModalProps {
@@ -82,6 +83,7 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
   };
 
   // Document Scanner State
+  const [isAbbyyModalOpen, setIsAbbyyModalOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<string>('');
   const [scannedFileDetails, setScannedFileDetails] = useState<{
@@ -356,6 +358,13 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAbbyyModalOpen(true)}
+                  className="text-xs text-white font-bold px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Scan className="w-3 h-3" /> ABBYY® Engine
+                </button>
                 {(fullName || passportNumber || email || phone || scannedFileDetails) && (
                   <button
                     type="button"
@@ -793,6 +802,26 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
           </form>
         </div>
       </div>
+
+      <AbbyyFineReaderPassportModal
+        isOpen={isAbbyyModalOpen}
+        onClose={() => setIsAbbyyModalOpen(false)}
+        onApplyData={(data, previewUrl, docName) => {
+          if (previewUrl) {
+            setAvatar(previewUrl);
+          }
+          setScannedFileDetails({
+            name: docName || 'passport_scan.jpg',
+            type: 'Passport Image Scan',
+            size: 'ABBYY Processed',
+            previewUrl,
+            confidenceScore: data.confidenceScore || 99,
+            docType: data.detectedDocumentType || 'ABBYY FineReader Passport OCR',
+          });
+          applyExtractedData(data, docName || 'passport_scan.jpg', data.detectedDocumentType);
+        }}
+        title="ABBYY® FineReader Engine — Tourist Profile Scanner"
+      />
     </div>
   );
 };

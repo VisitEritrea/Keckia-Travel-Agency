@@ -31,7 +31,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { TicketingClient, ClientCategory, FrequentFlyerRecord, CompanionMember } from '../../types';
-import { GImageReaderPassportModal } from './GImageReaderPassportModal';
+import { AbbyyFineReaderPassportModal } from '../common/AbbyyFineReaderPassportModal';
 import {
   scanDocumentWithAI,
   ScannedTouristData,
@@ -124,7 +124,7 @@ export const AddTicketingClientModal: React.FC<AddTicketingClientModalProps> = (
   const [autofilledFieldsCount, setAutofilledFieldsCount] = useState(0);
   const [highlightAutofill, setHighlightAutofill] = useState(false);
   const [extractedCompanions, setExtractedCompanions] = useState<CompanionMember[]>([]);
-  const [isGImageReaderModalOpen, setIsGImageReaderModalOpen] = useState(false);
+  const [isAbbyyModalOpen, setIsAbbyyModalOpen] = useState(false);
 
   // Applies extracted OCR data and leaves absent fields strictly blank
   const applyExtractedData = (
@@ -492,10 +492,10 @@ export const AddTicketingClientModal: React.FC<AddTicketingClientModalProps> = (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsGImageReaderModalOpen(true)}
-                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-amber-500/20"
+                    onClick={() => setIsAbbyyModalOpen(true)}
+                    className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-red-500/20"
                   >
-                    <ScanLine className="w-4 h-4" /> Tesseract OCR + gImageReader
+                    <ScanLine className="w-4 h-4" /> ABBYY® FineReader Engine
                   </button>
 
                   {(fullName || passportNumber || email || phone || passportDocumentName) && (
@@ -1094,14 +1094,14 @@ export const AddTicketingClientModal: React.FC<AddTicketingClientModalProps> = (
         </form>
       </div>
 
-      <GImageReaderPassportModal
-        isOpen={isGImageReaderModalOpen}
-        onClose={() => setIsGImageReaderModalOpen(false)}
+      <AbbyyFineReaderPassportModal
+        isOpen={isAbbyyModalOpen}
+        onClose={() => setIsAbbyyModalOpen(false)}
         onApplyData={(data, previewUrl, docName) => {
           applyExtractedData(
             data,
             docName || 'passport_scan.jpg',
-            data.detectedDocumentType || 'Tesseract OCR Passport Scan',
+            data.detectedDocumentType || 'ABBYY FineReader Verified Passport',
             previewUrl
           );
         }}

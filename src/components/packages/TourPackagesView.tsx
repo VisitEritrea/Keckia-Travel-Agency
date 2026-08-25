@@ -595,11 +595,17 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
                 {/* ------------------------------------------------------------- */}
                 <div className="p-6 sm:p-7 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-gradient-to-r from-slate-50/70 to-white">
                   <div className="flex items-start gap-4">
-                    <img
-                      src={exp.avatar}
-                      alt={exp.leadName}
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-white shadow-xs shrink-0"
-                    />
+                    {exp.avatar && exp.avatar.trim() !== '' ? (
+                      <img
+                        src={exp.avatar}
+                        alt={exp.leadName}
+                        className="w-14 h-14 rounded-2xl object-cover border-2 border-white shadow-xs shrink-0"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-2xl bg-amber-100 border-2 border-white shadow-xs shrink-0 flex items-center justify-center font-serif font-bold text-amber-900 text-lg">
+                        {exp.leadName ? exp.leadName.charAt(0).toUpperCase() : 'T'}
+                      </div>
+                    )}
 
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">

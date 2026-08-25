@@ -22,6 +22,13 @@ import {
   Check,
   RefreshCw,
   MapPin,
+  Sparkles,
+  Award,
+  Phone,
+  Mail,
+  X,
+  CreditCard,
+  CheckCircle,
 } from 'lucide-react';
 import {
   TouristProfile,
@@ -56,6 +63,7 @@ interface VisaPermitGeneratorViewProps {
   onSavePermitDoc: (permit: RegionalPermitDoc) => void;
   /** Left out for everyone but the administrator: approving changes a stored document. */
   onApproveVoADoc?: (docId: string) => void;
+  onAddTourist?: (tourist: TouristProfile) => void;
   initialSelectedTouristId?: string;
   initialSelectedScheduleId?: string;
 }
@@ -73,12 +81,32 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
   onSaveVoADoc,
   onSavePermitDoc,
   onApproveVoADoc,
+  onAddTourist,
   initialSelectedTouristId,
   initialSelectedScheduleId,
 }) => {
   const [activeDocType, setActiveDocType] = useState<'voa' | 'permit'>('voa');
   const [selectedVoa, setSelectedVoa] = useState<VisaOnArrivalDoc | null>(visaDocs[0] || null);
   const [selectedPermit, setSelectedPermit] = useState<RegionalPermitDoc | null>(permits[0] || null);
+
+  // Selected Tourist for the Top Dossier Inspector
+  const [selectedDossierTouristId, setSelectedDossierTouristId] = useState<string>(
+    initialSelectedTouristId || tourists[0]?.id || ''
+  );
+
+  // Registration Modal for New Tourist Profile directly in Hub
+  const [showAddTouristModal, setShowAddTouristModal] = useState(false);
+  const [newTouristName, setNewTouristName] = useState('');
+  const [newTouristPassport, setNewTouristPassport] = useState('');
+  const [newTouristExpiry, setNewTouristExpiry] = useState('');
+  const [newTouristNationality, setNewTouristNationality] = useState('United States');
+  const [newTouristDob, setNewTouristDob] = useState('');
+  const [newTouristGender, setNewTouristGender] = useState<'Male' | 'Female'>('Male');
+  const [newTouristOccupation, setNewTouristOccupation] = useState('International Traveler');
+  const [newTouristEmail, setNewTouristEmail] = useState('');
+  const [newTouristPhone, setNewTouristPhone] = useState('');
+  const [newTouristCategory, setNewTouristCategory] = useState<'Active Traveler' | 'VIP'>('Active Traveler');
+  const [newTouristNotes, setNewTouristNotes] = useState('');
 
   const todayISO = new Date().toISOString().split('T')[0];
 
@@ -91,6 +119,9 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
   // ==========================================
   const [voaReferenceNumber, setVoaReferenceNumber] = useState(generateVoaRef());
   const [letterDate, setLetterDate] = useState(todayISO);
+  const [voaTourTitle, setVoaTourTitle] = useState(
+    packages[0]?.title || 'Eritrea Visit & Cultural Tour'
+  );
   const [tourPackageId, setTourPackageId] = useState(packages[0]?.id || '');
   const [selectedSponsorOfficerId, setSelectedSponsorOfficerId] = useState(
     employees.find((e) => e.role === 'HR' || e.role === 'Admin')?.id || employees[0]?.id || ''
@@ -106,7 +137,7 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
   const [departureDate, setDepartureDate] = useState(initialVoaSchedule?.endDate || addDaysISO(14));
   const [voaScheduleId, setVoaScheduleId] = useState(initialVoaSchedule?.id || '');
   const [selectedVoaHotel, setSelectedVoaHotel] = useState(
-    hotels[0] ? `${hotels[0].name} (${hotels[0].city})` : ''
+    hotels[0] ? `${hotels[0].name} (${hotels[0].city})` : 'Hotel Asmara Palace'
   );
 
   const configuredPorts = useOptions('documents', 'entryPorts');
@@ -283,6 +314,64 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
       tourPlace: place,
     }));
   });
+
+  // Keep manifests and document selection in sync with preselected client/tourist
+  useEffect(() => {
+    if (initialSelectedTouristId && tourists.length > 0) {
+      const foundTourist = tourists.find((t) => t.id === initialSelectedTouristId);
+      if (foundTourist) {
+        setVoaTouristManifest([
+          {
+            name: foundTourist.fullName,
+            passportNo: foundTourist.passportNumber,
+            gender: foundTourist.gender || 'Male',
+            nationality: foundTourist.nationality,
+            job: foundTourist.occupation || 'International Traveler',
+          },
+        ]);
+        setPermitTouristManifest([
+          {
+            number: 1,
+            name: foundTourist.fullName,
+            nationality: foundTourist.nationality,
+            passportNumber: foundTourist.passportNumber,
+            sex: foundTourist.gender || 'Male',
+            tourDate: `${formatToDMY(initialPermitSchedule?.startDate) || '18/08/2026'} - ${formatToDMY(initialPermitSchedule?.endDate) || '25/08/2026'}`,
+            tourPlace: permitTourPlace || 'Asmara - Massawa',
+          },
+        ]);
+      }
+
+      const matchVoa = visaDocs.find(
+        (v) =>
+          v.touristId === initialSelectedTouristId ||
+          (foundTourist && v.passportNumber === foundTourist.passportNumber) ||
+          v.touristsManifest?.some((m) => m.passportNo === foundTourist?.passportNumber)
+      );
+      if (matchVoa) setSelectedVoa(matchVoa);
+
+      const matchPermit = permits.find(
+        (p) =>
+          (foundTourist && p.touristNames?.includes(foundTourist.fullName)) ||
+          (foundTourist && p.touristPassports?.includes(foundTourist.passportNumber)) ||
+          p.touristsManifest?.some((m) => m.passportNumber === foundTourist?.passportNumber)
+      );
+      if (matchPermit) setSelectedPermit(matchPermit);
+    }
+  }, [initialSelectedTouristId, tourists, visaDocs, permits, initialPermitSchedule, permitTourPlace]);
+
+  // Keep selectedVoa & selectedPermit synced if currently null or empty
+  useEffect(() => {
+    if (!selectedVoa && visaDocs.length > 0) {
+      setSelectedVoa(visaDocs[0]);
+    }
+  }, [visaDocs, selectedVoa]);
+
+  useEffect(() => {
+    if (!selectedPermit && permits.length > 0) {
+      setSelectedPermit(permits[0]);
+    }
+  }, [permits, selectedPermit]);
 
   // Modal / Inline Add Custom Tourist for Permit
   const [showAddCustomPermit, setShowAddCustomPermit] = useState(false);
@@ -512,12 +601,78 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
   };
 
   // ==========================================
+  // REGISTER NEW TOURIST PROFILE SUBMIT
+  // ==========================================
+  const handleCreateTouristProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTouristName.trim() || !newTouristPassport.trim()) return;
+
+    const newProfile: TouristProfile = {
+      id: `tourist-${Date.now()}`,
+      fullName: newTouristName.trim(),
+      passportNumber: newTouristPassport.trim(),
+      passportExpiry: newTouristExpiry || new Date(Date.now() + 5 * 365 * 86400000).toISOString().split('T')[0],
+      nationality: newTouristNationality || 'United States',
+      dateOfBirth: newTouristDob || '1990-01-01',
+      gender: newTouristGender,
+      occupation: newTouristOccupation || 'International Traveler',
+      email: newTouristEmail || '',
+      phone: newTouristPhone || '',
+      status: newTouristCategory,
+      avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
+      notes: newTouristNotes || 'Registered directly in Consular VoA & Travel Permits Hub',
+      travelHistoryCount: 1,
+      preferredLanguage: 'English',
+    };
+
+    if (onAddTourist) {
+      onAddTourist(newProfile);
+    }
+
+    setSelectedDossierTouristId(newProfile.id);
+
+    // Auto add to VoA Manifest
+    setVoaTouristManifest((prev) => [
+      ...prev,
+      {
+        name: newProfile.fullName,
+        passportNo: newProfile.passportNumber,
+        gender: newProfile.gender || 'Male',
+        nationality: newProfile.nationality,
+        job: newProfile.occupation || 'International Traveler',
+      },
+    ]);
+
+    // Auto add to Permit Manifest
+    setPermitTouristManifest((prev) => [
+      ...prev,
+      {
+        number: prev.length + 1,
+        name: newProfile.fullName,
+        nationality: newProfile.nationality,
+        passportNumber: newProfile.passportNumber,
+        sex: newProfile.gender || 'Male',
+        tourDate: permitTourDate || '18/08/2026 - 25/08/2026',
+        tourPlace: permitTourPlace || 'Asmara - Massawa',
+      },
+    ]);
+
+    // Reset fields and close modal
+    setNewTouristName('');
+    setNewTouristPassport('');
+    setNewTouristExpiry('');
+    setNewTouristDob('');
+    setNewTouristEmail('');
+    setNewTouristPhone('');
+    setNewTouristNotes('');
+    setShowAddTouristModal(false);
+  };
+
+  // ==========================================
   // GENERATE VOA SUBMIT
   // ==========================================
   const handleCreateVoA = (e: React.FormEvent) => {
     e.preventDefault();
-    const pkg = packages.find((p) => p.id === tourPackageId) || packages[0];
-    if (!pkg) return;
     const officer = employees.find((e) => e.id === selectedSponsorOfficerId) || employees[0];
 
     const effectiveRows = voaTouristManifest.length > 0
@@ -538,21 +693,21 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
       referenceNumber: voaReferenceNumber,
       touristId: primaryTourist?.id || 'tourist-001',
       touristName: effectiveRows[0]?.name || primaryTourist?.fullName || 'Traveler',
-      passportNumber: effectiveRows[0]?.passportNo || primaryTourist?.passportNumber,
+      passportNumber: effectiveRows[0]?.passportNo || primaryTourist?.passportNumber || 'Pending',
       passportExpiry: primaryTourist?.passportExpiry,
       gender: effectiveRows[0]?.gender || primaryTourist?.gender || 'Male',
       nationality: effectiveRows[0]?.nationality || primaryTourist?.nationality || 'International',
       job: effectiveRows[0]?.job || primaryTourist?.occupation || 'International Traveler',
-      occupation: effectiveRows[0]?.job || primaryTourist?.occupation,
+      occupation: effectiveRows[0]?.job || primaryTourist?.occupation || 'International Traveler',
       dateOfBirth: primaryTourist?.dateOfBirth,
-      tourPackageTitle: pkg.title,
+      tourPackageTitle: voaTourTitle || 'Eritrea Visit & Cultural Tour',
       tourScheduleId: voaScheduleId || undefined,
       arrivalDate,
       departureDate,
       entryPort,
       localSponsorName: 'Keckia Travel Agency',
       localSponsorLicense: 'LIC/TOUR/MOCT-88921-ET',
-      hotelArrangements: selectedVoaHotel,
+      hotelArrangements: selectedVoaHotel || 'Hotel Asmara Palace',
       issuanceStatus: 'Approved',
       generatedAt: letterDate,
       letterDate,
@@ -664,6 +819,201 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
 
   return (
     <div id="visa-permit-generator-container" className="space-y-6 pb-12 text-slate-900">
+      {/* Registration Modal for New Tourist Profile directly in Hub */}
+      {showAddTouristModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl max-w-xl w-full p-6 sm:p-8 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-200">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-serif font-bold text-slate-900 italic">
+                    Register Tourist Profile
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Add traveler details for Consular VoA sponsorship and Regional Travel Permits
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddTouristModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTouristProfile} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Full Name (as in Passport) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Dr. Eleanor Vance"
+                    value={newTouristName}
+                    onChange={(e) => setNewTouristName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Passport Number *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. USA-98765432"
+                    value={newTouristPassport}
+                    onChange={(e) => setNewTouristPassport(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Passport Expiry Date
+                  </label>
+                  <input
+                    type="date"
+                    value={newTouristExpiry}
+                    onChange={(e) => setNewTouristExpiry(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Nationality *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. United Kingdom / Germany"
+                    value={newTouristNationality}
+                    onChange={(e) => setNewTouristNationality(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    value={newTouristDob}
+                    onChange={(e) => setNewTouristDob(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Gender *
+                  </label>
+                  <select
+                    value={newTouristGender}
+                    onChange={(e) => setNewTouristGender(e.target.value as 'Male' | 'Female')}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Occupation / Professional Job
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Architect / University Professor"
+                    value={newTouristOccupation}
+                    onChange={(e) => setNewTouristOccupation(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Traveler Status Category
+                  </label>
+                  <select
+                    value={newTouristCategory}
+                    onChange={(e) => setNewTouristCategory(e.target.value as 'Active Traveler' | 'VIP')}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="Active Traveler">Standard Traveler</option>
+                    <option value="VIP">VIP Diplomatic / Executive Traveler</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="+1 555 019 2831"
+                    value={newTouristPhone}
+                    onChange={(e) => setNewTouristPhone(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="eleanor@example.com"
+                    value={newTouristEmail}
+                    onChange={(e) => setNewTouristEmail(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Special Notes / Sponsoring Directive
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. First visit to Eritrea; cultural expedition to Asmara & Massawa"
+                  value={newTouristNotes}
+                  onChange={(e) => setNewTouristNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTouristModal(false)}
+                  className="px-4 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-full bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" /> Save & Add to Manifest
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner */}
       <div className="p-6 sm:p-8 rounded-[2rem] bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -676,50 +1026,212 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-medium max-w-2xl">
-            Generate official Visa on Arrival (VoA) Recommendation Letters and Ministry of Tourism Regional Travel Permits with individual tourist profile selections for family and group tours, dynamic manifest builder, and reference numbers.
+            Generate official Visa on Arrival (VoA) Recommendation Letters and Ministry of Tourism Regional Travel Permits directly from registered Tourist Profiles without requiring pre-configured tour packages.
           </p>
         </div>
 
-        {/* Tab Toggle */}
-        <div className="flex items-center p-1 rounded-full bg-slate-100 border border-slate-200 text-xs shrink-0">
+        <div className="flex flex-wrap items-center gap-3">
           <button
-            onClick={() => setActiveDocType('voa')}
-            className={`px-5 py-2 rounded-full font-semibold transition flex items-center gap-2 cursor-pointer ${
-              activeDocType === 'voa'
-                ? 'bg-white text-blue-900 font-bold border border-blue-300 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            onClick={() => setShowAddTouristModal(true)}
+            className="px-4 py-2 rounded-full bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs shadow-xs hover:shadow transition flex items-center gap-1.5 cursor-pointer"
           >
-            <FileText className="w-4 h-4 text-blue-600" />
-            <span>Visa on Arrival (VoA) Letter</span>
+            <UserPlus className="w-4 h-4" />
+            <span>Register Tourist Profile</span>
           </button>
-          <button
-            onClick={() => setActiveDocType('permit')}
-            className={`px-5 py-2 rounded-full font-semibold transition flex items-center gap-2 cursor-pointer ${
-              activeDocType === 'permit'
-                ? 'bg-white text-slate-950 font-bold border border-slate-300 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4 text-emerald-700" />
-            <span>Regional Travel Permits</span>
-          </button>
+
+          {/* Tab Toggle */}
+          <div className="flex items-center p-1 rounded-full bg-slate-100 border border-slate-200 text-xs shrink-0">
+            <button
+              onClick={() => setActiveDocType('voa')}
+              className={`px-5 py-2 rounded-full font-semibold transition flex items-center gap-2 cursor-pointer ${
+                activeDocType === 'voa'
+                  ? 'bg-white text-blue-900 font-bold border border-blue-300 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileText className="w-4 h-4 text-blue-600" />
+              <span>Visa on Arrival (VoA) Letter</span>
+            </button>
+            <button
+              onClick={() => setActiveDocType('permit')}
+              className={`px-5 py-2 rounded-full font-semibold transition flex items-center gap-2 cursor-pointer ${
+                activeDocType === 'permit'
+                  ? 'bg-white text-slate-950 font-bold border border-slate-300 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4 text-emerald-700" />
+              <span>Regional Travel Permits</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {tourists.length === 0 || packages.length === 0 ? (
-        <div className="p-10 rounded-[2rem] bg-white border border-slate-200 shadow-xs text-center">
-          <Users className="w-10 h-10 mx-auto text-slate-300 mb-3" />
-          <p className="text-sm font-semibold text-slate-700">
-            {tourists.length === 0
-              ? 'Add a traveler before generating a VoA letter or travel permit.'
-              : 'Add a tour package before generating a VoA letter or travel permit.'}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            These are official documents built from registered travelers and tour packages on file.
-          </p>
+      {/* Tourist Profile Dossier & Compliance Inspector Bar */}
+      <div className="p-5 sm:p-6 rounded-[2rem] bg-slate-900 text-white border border-slate-800 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-400/30 flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-serif font-bold text-sm tracking-wide text-white">
+                Tourist Profile Dossier & Consular Verification
+              </h3>
+              <p className="text-[11px] text-slate-400 font-mono">
+                {tourists.length} Registered Tourist Profiles on File · {visaDocs.length} VoA Letters Issued · {permits.length} Permits Active
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAddTouristModal(true)}
+              className="px-3.5 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <Plus className="w-3.5 h-3.5" /> New Profile
+            </button>
+          </div>
         </div>
-      ) : (
+
+        {/* Tourist Profiles Horizontal Selector & Details */}
+        {tourists.length === 0 ? (
+          <div className="py-6 text-center space-y-2">
+            <Users className="w-8 h-8 mx-auto text-slate-600" />
+            <p className="text-xs text-slate-300 font-semibold">
+              No tourist profiles registered yet.
+            </p>
+            <button
+              onClick={() => setShowAddTouristModal(true)}
+              className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold cursor-pointer transition inline-flex items-center gap-1.5"
+            >
+              <UserPlus className="w-4 h-4" /> Register First Tourist Profile
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Quick Profile Chips */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+              {tourists.map((tourist) => {
+                const isSelected = selectedDossierTouristId === tourist.id;
+                return (
+                  <button
+                    key={tourist.id}
+                    onClick={() => setSelectedDossierTouristId(tourist.id)}
+                    className={`px-3.5 py-2 rounded-2xl border text-xs text-left transition flex items-center gap-2.5 shrink-0 cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-600 border-blue-400 text-white shadow-md'
+                        : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600'
+                    }`}
+                  >
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                      isSelected ? 'bg-white text-blue-900' : 'bg-slate-700 text-blue-400'
+                    }`}>
+                      {tourist.fullName.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold truncate text-[11px]">{tourist.fullName}</div>
+                      <div className="text-[10px] opacity-80 font-mono truncate">{tourist.passportNumber || 'Pending'}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Expanded Tourist Profile Dossier Card */}
+            {(() => {
+              const currentTourist = tourists.find((t) => t.id === selectedDossierTouristId) || tourists[0];
+              if (!currentTourist) return null;
+
+              return (
+                <div className="p-4 rounded-2xl bg-slate-800/90 border border-slate-700/80 grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+                  {/* Column 1: Identity & Status */}
+                  <div className="space-y-1.5 border-b md:border-b-0 md:border-r border-slate-700 pb-3 md:pb-0 md:pr-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                        {currentTourist.fullName.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-white text-sm truncate">{currentTourist.fullName}</h4>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800">
+                          <CheckCircle className="w-2.5 h-2.5" /> {currentTourist.status || 'Active Traveler'}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-400 pt-1 flex items-center gap-1">
+                      <Globe className="w-3.5 h-3.5 text-blue-400" />
+                      Nationality: <span className="text-slate-200 font-semibold">{currentTourist.nationality}</span>
+                    </p>
+                  </div>
+
+                  {/* Column 2: Passport & Compliance */}
+                  <div className="space-y-1 border-b md:border-b-0 md:border-r border-slate-700 pb-3 md:pb-0 md:pr-4">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono font-bold flex items-center gap-1">
+                      <CreditCard className="w-3 h-3 text-amber-400" /> Passport Verification
+                    </div>
+                    <div className="font-mono font-bold text-amber-400 text-sm">
+                      {currentTourist.passportNumber}
+                    </div>
+                    <div className="text-[11px] text-slate-300">
+                      Expiry: <span className="font-mono text-slate-200">{currentTourist.passportExpiry || 'Not specified'}</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-medium">
+                      ✓ Sponsoring clearance eligible
+                    </div>
+                  </div>
+
+                  {/* Column 3: Demographics & Job */}
+                  <div className="space-y-1 border-b md:border-b-0 md:border-r border-slate-700 pb-3 md:pb-0 md:pr-4">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono font-bold flex items-center gap-1">
+                      <Briefcase className="w-3 h-3 text-purple-400" /> Professional Profile
+                    </div>
+                    <div className="text-slate-200 font-semibold truncate">
+                      {currentTourist.occupation || 'International Traveler'}
+                    </div>
+                    <div className="text-[11px] text-slate-300">
+                      Gender: <span className="font-semibold text-slate-200">{currentTourist.gender || 'Male'}</span> · DOB: <span className="font-mono">{currentTourist.dateOfBirth || 'N/A'}</span>
+                    </div>
+                    {currentTourist.phone && (
+                      <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 truncate">
+                        <Phone className="w-2.5 h-2.5" /> {currentTourist.phone}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Column 4: Quick Actions */}
+                  <div className="flex flex-col justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDocType('voa');
+                        if (!isTouristInVoaManifest(currentTourist.passportNumber, currentTourist.fullName)) {
+                          toggleVoaTourist(currentTourist);
+                        }
+                      }}
+                      className="w-full py-1.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <FileText className="w-3.5 h-3.5" /> Use in VoA Letter
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDocType('permit');
+                        if (!isTouristInPermitManifest(currentTourist.passportNumber, currentTourist.fullName)) {
+                          togglePermitTourist(currentTourist);
+                        }
+                      }}
+                      className="w-full py-1.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-[11px] transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" /> Use in Travel Permit
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Generator Form & History */}
         <div className="lg:col-span-5 space-y-6">
@@ -804,6 +1316,14 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddTouristModal(true)}
+                        className="text-[10px] text-blue-700 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <UserPlus className="w-3 h-3" /> New Profile
+                      </button>
+                      <span className="text-slate-300">|</span>
                       <button
                         type="button"
                         onClick={selectAllVoaTourists}
@@ -980,59 +1500,96 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
                   </div>
                 </div>
 
-                {/* 2. Tour Package & Schedule */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 2. Tour Purpose / Itinerary Title & Travel Dates */}
+                <div className="space-y-3 p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5 text-amber-600" />
-                      2. Tour Package
+                    <label className="block font-bold text-slate-800 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Compass className="w-3.5 h-3.5 text-amber-700" />
+                        2. Tour Purpose & Route Itinerary *
+                      </span>
+                      <span className="text-[10px] text-amber-900 font-semibold font-mono">
+                        Consular Purpose
+                      </span>
                     </label>
-                    <select
-                      value={tourPackageId}
-                      onChange={(e) => handleVoaPackageSelect(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900 focus:bg-white"
-                    >
+                    <input
+                      type="text"
+                      required
+                      value={voaTourTitle}
+                      onChange={(e) => setVoaTourTitle(e.target.value)}
+                      placeholder="e.g. Eritrea Visit & Cultural Tour / Asmara & Red Sea Coast"
+                      className="w-full px-3 py-2 rounded-xl bg-white border border-amber-300 text-xs font-semibold text-slate-900 focus:outline-none"
+                    />
+
+                    {/* Quick presets & package tags */}
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <span className="text-[10px] text-amber-900 font-bold self-center mr-1">Presets:</span>
+                      {[
+                        'Eritrea Visit & Cultural Tour',
+                        'Asmara UNESCO & Massawa Coast',
+                        'Highlands & Qohaito Expedition',
+                        'Steam Railway & Dahlak Islands',
+                      ].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setVoaTourTitle(preset)}
+                          className="px-2 py-0.5 rounded-md bg-white hover:bg-amber-100 text-amber-950 text-[10px] font-medium border border-amber-300 transition cursor-pointer"
+                        >
+                          {preset}
+                        </button>
+                      ))}
                       {packages.map((pkg) => (
-                        <option key={pkg.id} value={pkg.id}>
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          onClick={() => {
+                            setVoaTourTitle(pkg.title);
+                            handleVoaPackageSelect(pkg.id);
+                          }}
+                          className="px-2 py-0.5 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-950 text-[10px] font-bold border border-amber-300 transition cursor-pointer"
+                        >
                           {pkg.title} ({pkg.durationDays}d)
-                        </option>
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Entry Port of Arrival</label>
-                    <select
-                      value={entryPort}
-                      onChange={(e) => setEntryPort(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:bg-white"
-                    >
-                      {entryPorts.map((port) => (
-                        <option key={port} value={port}>
-                          {port}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1 text-[11px]">Entry Port of Arrival</label>
+                      <select
+                        value={entryPort}
+                        onChange={(e) => setEntryPort(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:bg-white"
+                      >
+                        {entryPorts.map((port) => (
+                          <option key={port} value={port}>
+                            {port}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Arrival Date</label>
-                    <input
-                      type="date"
-                      value={arrivalDate}
-                      onChange={(e) => setArrivalDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 focus:bg-white"
-                    />
-                  </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1 text-[11px]">Arrival Date</label>
+                      <input
+                        type="date"
+                        value={arrivalDate}
+                        onChange={(e) => setArrivalDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-mono text-slate-900 focus:bg-white"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Departure Date</label>
-                    <input
-                      type="date"
-                      value={departureDate}
-                      onChange={(e) => setDepartureDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-900 focus:bg-white"
-                    />
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1 text-[11px]">Departure Date</label>
+                      <input
+                        type="date"
+                        value={departureDate}
+                        onChange={(e) => setDepartureDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-mono text-slate-900 focus:bg-white"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1740,7 +2297,6 @@ export const VisaPermitGeneratorView: React.FC<VisaPermitGeneratorViewProps> = (
           )}
         </div>
       </div>
-      )}
     </div>
   );
 };

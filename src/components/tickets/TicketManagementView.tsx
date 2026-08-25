@@ -48,6 +48,8 @@ interface TicketManagementViewProps {
   onUpdateTicketStatus: (ticketId: string, status: Ticket['status']) => void;
   onRecordPayment?: (ticketId: string, amountCollected: number, newPaymentStatus: PaymentStatus) => void;
   onAddClient?: (client: TicketingClient) => void;
+  onUpdateClient?: (client: TicketingClient) => void;
+  onDeleteClient?: (clientId: string) => void;
 }
 
 export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
@@ -61,6 +63,8 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
   onUpdateTicketStatus,
   onRecordPayment,
   onAddClient,
+  onUpdateClient,
+  onDeleteClient,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'tickets' | 'clients'>('tickets');
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
@@ -307,6 +311,8 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
           tickets={tickets}
           onOpenAddClient={() => setIsAddClientModalOpen(true)}
           onAddClient={onAddClient}
+          onUpdateClient={onUpdateClient}
+          onDeleteClient={onDeleteClient}
           onOpenIssueTicketForClient={(client) => {
             setClientForIssuance(client);
             setIsIssueModalOpen(true);

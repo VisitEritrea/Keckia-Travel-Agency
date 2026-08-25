@@ -1,4 +1,4 @@
-import { runTesseractOcr } from './tesseractOcr';
+import { runAbbyyFineReaderEngine } from './abbyyFineReaderEngine';
 
 export interface ScannedCompanionData {
   fullName?: string;
@@ -479,7 +479,7 @@ export function normalizeNationality(val?: string | null): string {
 }
 
 /**
- * Scan an uploaded image or PDF file using Tesseract OCR + gImageReader Optical Engine,
+ * Scan an uploaded image or PDF file using ABBYY FineReader Engine 12.5 Core OCR,
  * with backend verification, strictly returning extracted fields and leaving absent fields blank.
  */
 export async function scanDocumentWithAI(
@@ -487,25 +487,28 @@ export async function scanDocumentWithAI(
 ): Promise<{ success: boolean; data: ScannedTouristData; message: string }> {
   const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
-  // If it's an image, run Tesseract OCR directly
+  // If it's an image, run ABBYY FineReader Engine OCR
   if (!isPdf) {
     try {
-      const tesseractResult = await runTesseractOcr(file);
+      const abbyyResult = await runAbbyyFineReaderEngine(file, {
+        profile: 'Passport_MRZ_TD3',
+        enableDeskew: true,
+      });
       if (
-        tesseractResult &&
-        tesseractResult.data &&
-        (tesseractResult.data.fullName || tesseractResult.data.passportNumber || tesseractResult.data.nationality)
+        abbyyResult &&
+        abbyyResult.extractedData &&
+        (abbyyResult.extractedData.fullName || abbyyResult.extractedData.passportNumber || abbyyResult.extractedData.nationality)
       ) {
         return {
           success: true,
-          data: tesseractResult.data,
-          message: `Successfully extracted passport & biometric data using Tesseract OCR (Confidence: ${Math.round(
-            tesseractResult.confidence
+          data: abbyyResult.extractedData,
+          message: `Successfully extracted biometric & MRZ passport data via ABBYY® FineReader Engine (Confidence: ${Math.round(
+            abbyyResult.overallConfidence
           )}%)`,
         };
       }
     } catch (ocrErr) {
-      console.warn('Local Tesseract OCR attempt notice:', ocrErr);
+      console.warn('ABBYY FineReader engine attempt notice:', ocrErr);
     }
   }
 

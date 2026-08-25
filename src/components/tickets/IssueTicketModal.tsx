@@ -25,7 +25,7 @@ import {
   User,
 } from 'lucide-react';
 import { TouristProfile, TourSchedule, Ticket, PaymentStatus } from '../../types';
-import { GImageReaderPassportModal } from './GImageReaderPassportModal';
+import { AbbyyFineReaderPassportModal } from '../common/AbbyyFineReaderPassportModal';
 import {
   scanDocumentWithAI,
   ScannedTouristData,
@@ -92,49 +92,44 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
   // Flight Types & Itinerary Routing
   const [journeyType, setJourneyType] = useState<'Round Trip' | 'One Way' | 'Stopover Transit' | 'Multi-City'>('Round Trip');
 
-  // Outbound Flight Details
-  const [airline, setAirline] = useState('Flydubai');
-  const [route, setRoute] = useState('ASM–DXB–ASM');
-  const [pnr, setPnr] = useState(`FD${Math.floor(1000 + Math.random() * 9000)}`);
-  const [flightNumber, setFlightNumber] = useState('FZ-622');
-  const [departureTime, setDepartureTime] = useState('08:30');
-  const [arrivalTime, setArrivalTime] = useState('12:45');
-  const [boardingTime, setBoardingTime] = useState('07:45');
-  const [fromAirport, setFromAirport] = useState('ASM');
-  const [toAirport, setToAirport] = useState('DXB');
-  const [terminal, setTerminal] = useState('T2');
-  const [gate, setGate] = useState('03');
-  const [seatNumber, setSeatNumber] = useState('14A');
+  // Outbound Flight Details (Blank Defaults)
+  const [airline, setAirline] = useState('');
+  const [route, setRoute] = useState('');
+  const [pnr, setPnr] = useState('');
+  const [flightNumber, setFlightNumber] = useState('');
+  const [departureTime, setDepartureTime] = useState('');
+  const [arrivalTime, setArrivalTime] = useState('');
+  const [boardingTime, setBoardingTime] = useState('');
+  const [fromAirport, setFromAirport] = useState('');
+  const [toAirport, setToAirport] = useState('');
+  const [terminal, setTerminal] = useState('');
+  const [gate, setGate] = useState('');
+  const [seatNumber, setSeatNumber] = useState('');
   const [ticketClass, setTicketClass] = useState<'Standard' | 'VIP' | 'Group'>('Standard');
 
   // Dates (ISO)
-  const addDays = (days: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
-    return d.toISOString().split('T')[0];
-  };
-  const todayStr = addDays(0);
+  const todayStr = new Date().toISOString().split('T')[0];
   const [bookingDate] = useState(todayStr);
-  const [departureDate, setDepartureDate] = useState(addDays(4));
-  const [returnDate, setReturnDate] = useState(addDays(11));
+  const [departureDate, setDepartureDate] = useState('');
+  const [returnDate, setReturnDate] = useState('');
   const [paymentDate] = useState(todayStr);
 
-  // Return Flight Extended Schedule (when Round Trip or Multi-City)
-  const [returnAirline, setReturnAirline] = useState('Flydubai');
-  const [returnFlightNumber, setReturnFlightNumber] = useState('FZ-623');
-  const [returnDepartureTime, setReturnDepartureTime] = useState('14:20');
-  const [returnArrivalTime, setReturnArrivalTime] = useState('18:35');
-  const [returnBoardingTime, setReturnBoardingTime] = useState('13:35');
-  const [returnFrom, setReturnFrom] = useState('DXB');
-  const [returnTo, setReturnTo] = useState('ASM');
-  const [returnTerminal, setReturnTerminal] = useState('T3');
-  const [returnGate, setReturnGate] = useState('B12');
-  const [returnBoardingGroup, setReturnBoardingGroup] = useState('Zone 2');
-  const [returnSeat, setReturnSeat] = useState('16F');
+  // Return Flight Extended Schedule (when Round Trip or Multi-City) (Blank Defaults)
+  const [returnAirline, setReturnAirline] = useState('');
+  const [returnFlightNumber, setReturnFlightNumber] = useState('');
+  const [returnDepartureTime, setReturnDepartureTime] = useState('');
+  const [returnArrivalTime, setReturnArrivalTime] = useState('');
+  const [returnBoardingTime, setReturnBoardingTime] = useState('');
+  const [returnFrom, setReturnFrom] = useState('');
+  const [returnTo, setReturnTo] = useState('');
+  const [returnTerminal, setReturnTerminal] = useState('');
+  const [returnGate, setReturnGate] = useState('');
+  const [returnBoardingGroup, setReturnBoardingGroup] = useState('');
+  const [returnSeat, setReturnSeat] = useState('');
 
-  // Financials (USD)
-  const [ticketCost, setTicketCost] = useState<number | ''>(650);
-  const [serviceFee, setServiceFee] = useState<number | ''>(35);
+  // Financials (USD) (Blank Defaults)
+  const [ticketCost, setTicketCost] = useState<number | ''>('');
+  const [serviceFee, setServiceFee] = useState<number | ''>('');
   const [penaltyFee, setPenaltyFee] = useState<number | ''>('');
   const [loan, setLoan] = useState<number | ''>('');
 
@@ -156,18 +151,18 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
   const [agent, setAgent] = useState(user?.fullName || (user?.role === 'AGENT' ? user.fullName : 'Sales Agent'));
   const [creditCardRef, setCreditCardRef] = useState('');
 
-  // Complimentary Airport Shuttle Timings & Logistics
+  // Complimentary Airport Shuttle Timings & Logistics (Blank Defaults)
   const [airportShuttle, setAirportShuttle] = useState(false);
-  const [airportShuttleTime, setAirportShuttleTime] = useState('05:30');
-  const [airportShuttlePickupLocation, setAirportShuttlePickupLocation] = useState('Hotel Asmara Palace Main Lobby');
-  const [airportShuttleVehicleId, setAirportShuttleVehicleId] = useState('Toyota HiAce VIP Shuttle (ER-2-09412)');
-  const [airportShuttleDriverId, setAirportShuttleDriverId] = useState('Yemane Tesfay (+291 7 123456)');
-  const [airportShuttleNotes, setAirportShuttleNotes] = useState('Luggage assistance requested for 2 checked bags');
+  const [airportShuttleTime, setAirportShuttleTime] = useState('');
+  const [airportShuttlePickupLocation, setAirportShuttlePickupLocation] = useState('');
+  const [airportShuttleVehicleId, setAirportShuttleVehicleId] = useState('');
+  const [airportShuttleDriverId, setAirportShuttleDriverId] = useState('');
+  const [airportShuttleNotes, setAirportShuttleNotes] = useState('');
 
   // Pre-issue Checklist
-  const [visaConfirmed, setVisaConfirmed] = useState(true);
+  const [visaConfirmed, setVisaConfirmed] = useState(false);
   const [mileageCaptured, setMileageCaptured] = useState(false);
-  const [nameMatchesPassport, setNameMatchesPassport] = useState(true);
+  const [nameMatchesPassport, setNameMatchesPassport] = useState(false);
 
   // Passport & Dossier OCR State
   const [isScanning, setIsScanning] = useState(false);
@@ -183,7 +178,7 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
   const [autofilledFieldsCount, setAutofilledFieldsCount] = useState(0);
   const [highlightAutofill, setHighlightAutofill] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isGImageReaderOpen, setIsGImageReaderOpen] = useState(false);
+  const [isAbbyyScannerOpen, setIsAbbyyScannerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Apply OCR scanned results
@@ -284,44 +279,45 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
     const loanNum = Number(loan) || 0;
     const totalFare = costNum + feeNum + penaltyNum + loanNum;
     const paidNum = Math.min(Number(amountPaid) || 0, totalFare || Number(amountPaid) || 0);
+    const effectivePnr = pnr.trim() || `PNR${Math.floor(100000 + Math.random() * 900000)}`;
 
     const newTicket: Ticket = {
       id: `tkt-${Date.now().toString().slice(-4)}`,
-      ticketNumber: `VE-${pnr || Math.floor(1000 + Math.random() * 9000)}`,
-      bookingRef: pnr || `BK-${Math.floor(1000 + Math.random() * 9000)}`,
-      pnr: pnr || `PNR${Math.floor(1000 + Math.random() * 9000)}`,
+      ticketNumber: `VE-${effectivePnr}`,
+      bookingRef: effectivePnr,
+      pnr: effectivePnr,
       tourScheduleId: schedules[0]?.id || 'sch-001',
-      tourTitle: `${airline} Booking (${route})`,
-      destination: route,
-      departureDate: departureDate || '18/08/2026',
-      returnDate: journeyType === 'One Way' ? undefined : returnDate || '25/08/2026',
-      departureTime: departureTime || '08:30',
-      arrivalTime: arrivalTime || '12:45',
-      boardingTime: boardingTime || '07:45',
-      fromAirport,
-      toAirport,
-      terminal,
-      gate,
-      seatNumber: seatNumber || '14A',
+      tourTitle: airline ? `${airline} Booking (${route || 'Direct'})` : `Flight Ticket Booking (${route || 'Flight'})`,
+      destination: route || 'Asmara (ASM)',
+      departureDate: departureDate || todayStr,
+      returnDate: journeyType === 'One Way' ? undefined : returnDate || undefined,
+      departureTime: departureTime || '',
+      arrivalTime: arrivalTime || '',
+      boardingTime: boardingTime || '',
+      fromAirport: fromAirport || '',
+      toAirport: toAirport || '',
+      terminal: terminal || '',
+      gate: gate || '',
+      seatNumber: seatNumber || '',
       ticketClass,
-      flightNumber: flightNumber || 'FZ-622',
+      flightNumber: flightNumber || '',
       journeyType,
 
       // Return Leg (if Round Trip / Multi-City / Stopover)
       ...(journeyType !== 'One Way'
         ? {
-            returnAirline,
-            returnFlightNumber,
-            returnFlightDate: returnDate,
-            returnDepartureTime,
-            returnArrivalTime,
-            returnBoardingTime,
-            returnFrom,
-            returnTo,
-            returnTerminal,
-            returnGate,
-            returnBoardingGroup,
-            returnSeat,
+            returnAirline: returnAirline || airline || '',
+            returnFlightNumber: returnFlightNumber || '',
+            returnFlightDate: returnDate || '',
+            returnDepartureTime: returnDepartureTime || '',
+            returnArrivalTime: returnArrivalTime || '',
+            returnBoardingTime: returnBoardingTime || '',
+            returnFrom: returnFrom || '',
+            returnTo: returnTo || '',
+            returnTerminal: returnTerminal || '',
+            returnGate: returnGate || '',
+            returnBoardingGroup: returnBoardingGroup || '',
+            returnSeat: returnSeat || '',
           }
         : {}),
 
@@ -332,14 +328,14 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
       clientName: clientName || 'Unnamed Traveler',
       phoneNumber,
       touristPassport: passportNumber || 'N/A',
-      qrCodeData: `VISITERITREA-AIR-PASS::${pnr}::${clientName}::${airline}::${flightNumber}`,
+      qrCodeData: `VISITERITREA-AIR-PASS::${effectivePnr}::${clientName}::${airline}::${flightNumber}`,
       issueDate: todayStr,
       status: 'Valid',
-      price: totalFare || 650,
+      price: totalFare,
       leadGuideName: agent,
-      pickupLocation: airportShuttle ? airportShuttlePickupLocation : 'Standard Self-Transfer',
-      airline,
-      route,
+      pickupLocation: airportShuttle ? (airportShuttlePickupLocation || 'Airport Shuttle Transfer') : 'Standard Self-Transfer',
+      airline: airline || 'Scheduled Carrier',
+      route: route || 'ASM',
       ticketCost: costNum,
       serviceFee: feeNum,
       penaltyFee: penaltyNum,
@@ -542,11 +538,11 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
               <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
                 <button
                   type="button"
-                  onClick={() => setIsGImageReaderOpen(true)}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  onClick={() => setIsAbbyyScannerOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
                 >
                   <ScanLine className="w-3.5 h-3.5" />
-                  Passport OCR (gImageReader)
+                  ABBYY® FineReader Engine
                 </button>
 
                 {scannedFileDetails ? (
@@ -688,6 +684,7 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
                     onChange={(e) => setAirline(e.target.value)}
                     className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 cursor-pointer font-medium"
                   >
+                    <option value="">Select Airline...</option>
                     {AIRLINE_OPTIONS.map((air) => (
                       <option key={air} value={air}>
                         {air}
@@ -833,6 +830,7 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
                       onChange={(e) => setReturnAirline(e.target.value)}
                       className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-blue-200 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 cursor-pointer font-medium"
                     >
+                      <option value="">Select Return Airline...</option>
                       {AIRLINE_OPTIONS.map((air) => (
                         <option key={air} value={air}>
                           {air}
@@ -1238,9 +1236,9 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
         </form>
       </div>
 
-      <GImageReaderPassportModal
-        isOpen={isGImageReaderOpen}
-        onClose={() => setIsGImageReaderOpen(false)}
+      <AbbyyFineReaderPassportModal
+        isOpen={isAbbyyScannerOpen}
+        onClose={() => setIsAbbyyScannerOpen(false)}
         onApplyData={(data, previewUrl, docName) => {
           applyExtractedData(data);
           setScannedFileDetails({
@@ -1249,7 +1247,7 @@ export const IssueTicketModal: React.FC<IssueTicketModalProps> = ({
             size: 'Processed OCR',
             previewUrl,
             confidenceScore: data.confidenceScore || 98,
-            docType: data.detectedDocumentType || 'Tesseract OCR Scan',
+            docType: data.detectedDocumentType || 'ABBYY FineReader OCR Scan',
           });
         }}
       />

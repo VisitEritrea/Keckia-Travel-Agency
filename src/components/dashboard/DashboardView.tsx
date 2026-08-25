@@ -14,6 +14,7 @@ import {
   Sparkles,
   Mountain,
 } from 'lucide-react';
+import { DashboardPhoneBook } from './DashboardPhoneBook';
 import {
   Employee,
   TourSchedule,
@@ -577,6 +578,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Operational Directory & Phone Book */}
+      <DashboardPhoneBook employees={employees} />
 
       {/* 2 Quick Action Banners */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
