@@ -426,7 +426,7 @@ export const HotelManagementView: React.FC<HotelManagementViewProps> = ({
 
                       {/* Guest / Tourist Info */}
                       <div className="mt-3 flex items-start gap-3">
-                        {tourist?.avatar ? (
+                        {tourist?.avatar && tourist.avatar.trim() !== '' ? (
                           <img
                             src={tourist.avatar}
                             alt={res.touristName}
@@ -574,7 +574,7 @@ export const HotelManagementView: React.FC<HotelManagementViewProps> = ({
               >
                 {/* Hotel Header & Image */}
                 <div className="flex flex-col sm:flex-row gap-4">
-                  {hotel.image ? (
+                  {hotel.image && hotel.image.trim() !== '' ? (
                     <img
                       src={hotel.image}
                       alt={hotel.name}

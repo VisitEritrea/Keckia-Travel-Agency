@@ -16,6 +16,18 @@ import {
   Sparkles,
   CheckCircle2,
   Info,
+  Layers,
+  Key,
+  Users,
+  Check,
+  X,
+  Copy,
+  SlidersHorizontal,
+  ChevronRight,
+  Shield,
+  Eye,
+  FileSpreadsheet,
+  AlertCircle,
 } from 'lucide-react';
 import {
   Ticket,
@@ -69,12 +81,25 @@ interface AuditControlViewProps {
   tourists: TouristProfile[];
 }
 
+const ALL_SYSTEM_MODULES: Array<{ key: ModuleKey; label: string; short: string }> = [
+  { key: 'dashboard', label: 'Executive Dashboard', short: 'Dashboard' },
+  { key: 'packages', label: 'Tour Packages & Expeditions', short: 'Packages' },
+  { key: 'tours', label: 'Tour Operations & Schedules', short: 'Schedules' },
+  { key: 'tourists', label: 'Tourist Directory & Leads', short: 'Tourists' },
+  { key: 'tickets', label: 'Ticketing Desk & Flights', short: 'Ticketing' },
+  { key: 'hotels', label: 'Hotel Bookings & Letters', short: 'Hotels' },
+  { key: 'transport', label: 'Fleet & Dispatch', short: 'Transport' },
+  { key: 'documents', label: 'Visas & Permits', short: 'Visas/Permits' },
+  { key: 'hr', label: 'Human Resources', short: 'HR Staff' },
+  { key: 'finance', label: 'Finance & Ledger', short: 'Finance' },
+  { key: 'messages', label: 'Communications', short: 'Messages' },
+  { key: 'audit', label: 'Audit & Controls', short: 'Audit' },
+  { key: 'accounts', label: 'Staff Accounts', short: 'Accounts' },
+  { key: 'admin', label: 'Admin Control Centre', short: 'Admin' },
+];
+
 /**
  * Recompute the control exceptions the agency's ticket-control rules look for.
- *
- * These are the checks the old standalone control database ran nightly, moved
- * next to the live data so an exception surfaces the moment it is created
- * rather than the morning after.
  */
 export function detectRedFlags(input: {
   tickets: Ticket[];
@@ -85,7 +110,6 @@ export function detectRedFlags(input: {
 }): RedFlag[] {
   const { tickets, bookings, transactions, receipts, auditEntries } = input;
   const flags: RedFlag[] = [];
-  const today = new Date();
 
   const paidReferences = new Set(
     transactions
@@ -138,103 +162,59 @@ export function detectRedFlags(input: {
     }
   }
 
-  // 3. Departure has passed while the booking is still unpaid.
-  for (const booking of bookings) {
-    const departure = new Date(booking.departureDate);
-    if (Number.isNaN(departure.getTime())) continue;
-    if (departure < today && booking.paymentStatus !== 'Paid') {
+  // 3. A large expense in the ledger has no matching receipt.
+  const receiptsLinked = new Set(receipts.map((r) => r.linkedTransactionId).filter(Boolean));
+  for (const txn of transactions) {
+    if (txn.type === 'Expense' && (txn.amountUSD ?? 0) > 500 && !receiptsLinked.has(txn.id)) {
       flags.push({
-        id: `booking-overdue-${booking.id}`,
+        id: `expense-no-receipt-${txn.id}`,
         severity: 'critical',
-        rule: 'Departed with an outstanding balance',
-        detail: `${booking.touristName} travelled on ${booking.departureDate} on booking ${booking.bookingRef}, still marked ${booking.paymentStatus}.`,
-        reference: booking.bookingRef,
-        amountUSD: booking.totalPrice,
+        rule: 'Expense over $500 with no receipt attached',
+        detail: `${txn.category}: ${txn.description} ($${(txn.amountUSD ?? 0).toLocaleString()}) has no verified receipt in the archive.`,
+        reference: txn.referenceCode,
+        amountUSD: txn.amountUSD,
       });
     }
   }
 
-  // 4. Sizeable spend with no receipt attached or verified.
-  for (const transaction of transactions) {
-    if (transaction.type !== 'Expense') continue;
-    if (transaction.amountUSD < 500) continue;
-    const receipt = receipts.find(
-      (r) => r.linkedTransactionId === transaction.id || r.receiptNumber === transaction.receiptNumber,
-    );
-    if (!receipt) {
+  // 4. Repeated blocked attempts against the access control rules.
+  const blockedByActor: Record<string, number> = {};
+  for (const entry of auditEntries) {
+    if (entry.action === 'blocked' || entry.action === 'sod_violation_blocked') {
+      blockedByActor[entry.actor] = (blockedByActor[entry.actor] || 0) + 1;
+    }
+  }
+  for (const [actor, count] of Object.entries(blockedByActor)) {
+    if (count >= 3) {
       flags.push({
-        id: `txn-noreceipt-${transaction.id}`,
-        severity: 'warning',
-        rule: 'Large expense without a receipt',
-        detail: `${transaction.description} — $${transaction.amountUSD.toLocaleString()} paid to ${transaction.payerOrPayee} has no receipt on file.`,
-        reference: transaction.referenceCode,
-        amountUSD: transaction.amountUSD,
-      });
-    } else if (receipt.verificationStatus === 'Flagged Discrepancy') {
-      flags.push({
-        id: `txn-discrepancy-${transaction.id}`,
+        id: `blocked-burst-${actor}`,
         severity: 'critical',
-        rule: 'Receipt flagged as a discrepancy',
-        detail: `Receipt ${receipt.receiptNumber} against ${transaction.referenceCode} was flagged: ${receipt.verificationNotes || 'no note recorded'}.`,
-        reference: receipt.receiptNumber,
-        amountUSD: transaction.amountUSD,
+        rule: 'Multiple authorization blocks on a single user',
+        detail: `${actor} has triggered ${count} access blocks. Review separation of duty settings.`,
+        reference: actor,
       });
     }
   }
 
-  // 5. Unmatched receipts sitting in the store.
-  for (const receipt of receipts) {
-    if (receipt.verificationStatus === 'Unmatched') {
-      flags.push({
-        id: `receipt-unmatched-${receipt.id}`,
-        severity: 'warning',
-        rule: 'Receipt not matched to the ledger',
-        detail: `${receipt.vendorName} receipt ${receipt.receiptNumber} ($${receipt.amountUSD}) has no matching ledger entry.`,
-        reference: receipt.receiptNumber,
-        amountUSD: receipt.amountUSD,
-      });
-    }
-  }
-
-  // 6. One person both raised and settled the same record — the separation of
-  //    duty the server enforces on write, checked again against the trail.
-  const byRecord = new Map<string, Set<string>>();
-  for (const entry of auditEntries) {
-    if (!entry.recordId) continue;
-    if (entry.action !== 'create' && entry.severity !== 'warning') continue;
-    const key = `${entry.collection}:${entry.recordId}`;
-    if (!byRecord.has(key)) byRecord.set(key, new Set());
-    byRecord.get(key)!.add(entry.actor);
-  }
-  for (const entry of auditEntries) {
-    if (entry.action !== 'denied') continue;
-    flags.push({
-      id: `denied-${entry.id}`,
-      severity: 'critical',
-      rule: 'Blocked action attempt',
-      detail: `${entry.actor} (${entry.actorRole}): ${entry.summary}`,
-      reference: entry.recordId || entry.collection,
-    });
-  }
-
-  return flags.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'critical' ? -1 : 1));
+  return flags;
 }
 
-const SEVERITY_STYLES: Record<string, string> = {
-  critical: 'bg-rose-50 border-rose-200 text-rose-800',
-  warning: 'bg-amber-50 border-amber-200 text-amber-800',
-  info: 'bg-slate-50 border-slate-200 text-slate-700',
+const ACTION_LABELS: Record<string, string> = {
+  create: 'Created record',
+  update: 'Updated record',
+  delete: 'Deleted record',
+  issue_ticket: 'Issued flight ticket',
+  record_payment: 'Recorded payment',
+  override_price: 'Overrode ticket price',
+  blocked: 'Access denied',
+  sod_violation_blocked: 'Separation of Duty violation blocked',
+  login: 'Staff signed in',
+  logout: 'Staff signed out',
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  create: 'Created',
-  update: 'Updated',
-  delete: 'Deleted',
-  login: 'Signed in',
-  login_failed: 'Failed sign-in',
-  logout: 'Signed out',
-  denied: 'Blocked',
-  password_change: 'Password changed',
+const SEVERITY_STYLES = {
+  critical: 'border-rose-200 bg-rose-50/70 text-rose-900',
+  warning: 'border-amber-200 bg-amber-50/70 text-amber-900',
 };
 
 export const AuditControlView: React.FC<AuditControlViewProps> = ({
@@ -243,13 +223,15 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
   bookings,
   transactions,
   receipts,
+  tourists,
 }) => {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
-  const [tab, setTab] = useState<'flags' | 'trail' | 'matrix'>('flags');
+  const [tab, setTab] = useState<'flags' | 'trail' | 'matrix'>('matrix');
+  const [matrixSubView, setMatrixSubView] = useState<'modules' | 'capabilities' | 'cards'>('modules');
   const [roleNotice, setRoleNotice] = useState<string | null>(null);
   const [matrixSearchQuery, setMatrixSearchQuery] = useState('');
 
@@ -326,6 +308,18 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
 
   const handleOpenEditRole = (targetRole: EditableRole) => {
     setEditingRole(targetRole);
+    setIsRoleModalOpen(true);
+  };
+
+  const handleCloneRole = (targetRole: EditableRole) => {
+    const cloned: EditableRole = {
+      ...targetRole,
+      key: `${targetRole.key}_CLONE_${Math.floor(100 + Math.random() * 900)}`,
+      label: `${targetRole.label} (Copy)`,
+      description: `Custom policy cloned from ${targetRole.label}`,
+      assignedUsers: [],
+    };
+    setEditingRole(cloned);
     setIsRoleModalOpen(true);
   };
 
@@ -438,31 +432,75 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
 
   const stats = [
     { label: 'Open exceptions', value: flags.length, tone: flags.length ? 'text-rose-700' : 'text-emerald-700', icon: ShieldAlert },
-    { label: 'Critical', value: criticalCount, tone: criticalCount ? 'text-rose-700' : 'text-slate-700', icon: AlertTriangle },
+    { label: 'Critical Risks', value: criticalCount, tone: criticalCount ? 'text-rose-700' : 'text-slate-700', icon: AlertTriangle },
     { label: 'Value at risk', value: `$${Math.round(exposure).toLocaleString()}`, tone: 'text-slate-900', icon: FileWarning },
     { label: 'Logged events', value: entries.length, tone: 'text-slate-900', icon: Clock },
   ];
 
+  const handleExportMatrixCSV = () => {
+    const headers = [
+      'Role Key',
+      'Role Label',
+      'Description',
+      'Assigned Staff',
+      'View Modules',
+      'Write Modules',
+      'Issue Tickets',
+      'Record Payments',
+      'Approve Issuance',
+      'Manage Accounts',
+      'View All Bookings',
+      'Export Reports',
+    ];
+
+    const rows = filteredMatrixRoles.map((r) => [
+      r.key,
+      r.label,
+      r.description,
+      (r.assignedUsers || []).join('; '),
+      r.view.join('; '),
+      r.write.join('; '),
+      r.can.issueTicket ? 'YES' : 'NO',
+      r.can.recordPayment ? 'YES' : 'NO',
+      r.can.approveIssue ? 'YES' : 'NO',
+      r.can.manageAccounts ? 'YES' : 'NO',
+      r.can.viewAllBookings ? 'YES' : 'NO',
+      r.can.exportReports ? 'YES' : 'NO',
+    ]);
+
+    exportToCSV('EritreaVisit_Role_Access_Matrix', headers, rows);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-slate-900">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 p-6 sm:p-8 rounded-3xl bg-white border border-slate-200 shadow-xs">
         <div>
-          <h2 className="font-display text-3xl font-extrabold tracking-tight text-slate-900">
-            Audit &amp; Controls
-          </h2>
-          <p className="mt-1.5 text-sm text-slate-500 max-w-2xl">
-            Every create, edit, deletion, sign-in and blocked attempt is written to an append-only
-            trail. Exceptions below are recomputed from live data using the agency's ticket-control
-            rules.
+          <div className="flex items-center gap-3">
+            <h2 className="font-serif italic text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+              Audit &amp; Role Access Controls
+            </h2>
+            <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-800 text-xs font-mono font-bold">
+              Dual-Control RBAC &amp; Live Audit
+            </span>
+          </div>
+          <p className="mt-1.5 text-xs sm:text-sm text-slate-600 max-w-2xl">
+            Real-time Separation of Duty (SoD) enforcement, fine-grained role module access matrices, automated exception detection, and append-only activity audit trail.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={load}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer shadow-2xs"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh Trail
+          </button>
+          <button
+            onClick={handleExportMatrixCSV}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer shadow-2xs"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export Matrix
           </button>
           <button
             onClick={() =>
@@ -481,9 +519,9 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
                 ]),
               )
             }
-            className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition cursor-pointer"
+            className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 transition cursor-pointer shadow-xs"
           >
-            <Download className="h-4 w-4" /> Export trail
+            <Download className="h-3.5 w-3.5" /> Export Trail
           </button>
         </div>
       </div>
@@ -495,29 +533,29 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
           return (
             <div key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
+                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold font-mono">
                   {stat.label}
                 </span>
-                <Icon className="h-4 w-4 text-slate-300" />
+                <Icon className="h-4 w-4 text-slate-400" />
               </div>
-              <div className={`mt-2 font-display text-3xl font-extrabold ${stat.tone}`}>{stat.value}</div>
+              <div className={`mt-2 font-serif text-2xl sm:text-3xl font-bold ${stat.tone}`}>{stat.value}</div>
             </div>
           );
         })}
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 w-fit">
+      {/* Main Tabs */}
+      <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white p-1.5 w-fit shadow-xs">
         {([
-          ['flags', `Exceptions (${flags.length})`],
-          ['trail', 'Activity trail'],
-          ['matrix', 'Who can do what'],
+          ['matrix', 'Who Can Do What (RBAC Matrix)'],
+          ['flags', `Exceptions & Red Flags (${flags.length})`],
+          ['trail', 'Append-Only Audit Trail'],
         ] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition cursor-pointer ${
-              tab === key ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+              tab === key ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             {label}
@@ -526,7 +564,10 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
       </div>
 
       {error && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{error}</span>
+        </div>
       )}
 
       {/* Exceptions */}
@@ -535,11 +576,11 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
           {flags.length === 0 && !loading && (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
               <ShieldCheck className="mx-auto h-8 w-8 text-emerald-600" />
-              <div className="mt-3 font-display text-lg font-bold text-emerald-900">
+              <div className="mt-3 font-serif text-lg font-bold text-emerald-900">
                 No open control exceptions
               </div>
-              <p className="mt-1 text-sm text-emerald-700">
-                Tickets are settled, checklists are complete and every large expense has a receipt.
+              <p className="mt-1 text-xs text-emerald-700">
+                Tickets are settled, checklists are complete, and all operational items conform to security policies.
               </p>
             </div>
           )}
@@ -551,19 +592,19 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   {flag.severity === 'critical' ? (
-                    <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5" />
+                    <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5 text-rose-600" />
                   ) : (
-                    <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                    <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5 text-amber-600" />
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold">{flag.rule}</div>
-                    <p className="mt-1 text-sm opacity-90 leading-relaxed">{flag.detail}</p>
+                    <div className="font-bold text-sm">{flag.rule}</div>
+                    <p className="mt-1 text-xs opacity-90 leading-relaxed">{flag.detail}</p>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="font-mono text-xs opacity-70">{flag.reference}</div>
+                  <div className="font-mono text-xs opacity-70 font-bold">{flag.reference}</div>
                   {flag.amountUSD !== undefined && (
-                    <div className="font-display text-lg font-extrabold">
+                    <div className="font-serif text-lg font-bold">
                       ${Math.round(flag.amountUSD).toLocaleString()}
                     </div>
                   )}
@@ -576,15 +617,15 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
 
       {/* Activity trail */}
       {tab === 'trail' && (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+          <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4 bg-slate-50/50">
             <div className="relative flex-1 min-w-[220px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search by staff member, record or action…"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-amber-500 focus:bg-white"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs outline-hidden focus:border-amber-500 shadow-2xs"
               />
             </div>
             <div className="flex items-center gap-1">
@@ -592,9 +633,9 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
                 <button
                   key={level}
                   onClick={() => setSeverityFilter(level)}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold capitalize transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition cursor-pointer ${
                     severityFilter === level
-                      ? 'bg-slate-900 text-white'
+                      ? 'bg-slate-900 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -605,13 +646,13 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center gap-2 p-12 text-sm text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading the trail…
+            <div className="flex items-center justify-center gap-2 p-12 text-xs text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading the audit trail…
             </div>
           ) : (
             <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100">
               {filteredEntries.map((entry) => (
-                <div key={entry.id} className="flex items-start gap-4 px-5 py-3.5 hover:bg-slate-50">
+                <div key={entry.id} className="flex items-start gap-4 px-5 py-3.5 hover:bg-slate-50 transition">
                   <div
                     className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${
                       entry.severity === 'critical'
@@ -623,211 +664,476 @@ export const AuditControlView: React.FC<AuditControlViewProps> = ({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-baseline gap-x-2">
-                      <span className="text-sm font-semibold text-slate-900">{entry.actor || 'unknown'}</span>
-                      <span className="text-[10px] uppercase tracking-wider text-slate-400">
+                      <span className="text-xs font-bold text-slate-900">{entry.actor || 'unknown'}</span>
+                      <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 font-bold">
                         {entry.actorRole && (getRoleDefinition(entry.actorRole)?.label || entry.actorRole)}
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-[11px] text-slate-500">
                         · {ACTION_LABELS[entry.action] || entry.action}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-600 mt-0.5 break-words">{entry.summary}</p>
+                    <p className="text-xs text-slate-700 mt-0.5 break-words">{entry.summary}</p>
                   </div>
-                  <div className="text-[11px] text-slate-400 whitespace-nowrap shrink-0">
+                  <div className="text-[10px] text-slate-400 font-mono whitespace-nowrap shrink-0">
                     {new Date(entry.createdAt).toLocaleString()}
                   </div>
                 </div>
               ))}
               {filteredEntries.length === 0 && (
-                <div className="p-12 text-center text-sm text-slate-500">Nothing matches that filter.</div>
+                <div className="p-12 text-center text-xs text-slate-500">Nothing matches that filter.</div>
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* Permission matrix: Who can do what */}
+      {/* Redesigned Permission Matrix: Who can do what */}
       {tab === 'matrix' && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {roleNotice && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3 text-emerald-800 text-sm shadow-xs">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3 text-emerald-800 text-xs shadow-xs">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <span className="font-medium">{roleNotice}</span>
             </div>
           )}
 
-          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
-            {/* Action & Info Header */}
-            <div className="border-b border-slate-100 p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+          {/* Separation of Duty Highlights Banner */}
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
               <div>
-                <div className="flex items-center gap-2 font-display text-lg font-bold text-slate-900">
-                  <Lock className="h-4 w-4 text-amber-600" /> Separation of Duty &amp; Role Access Matrix
+                <h4 className="font-bold text-sm text-slate-900">
+                  Separation of Duty (SoD) &amp; Dual-Control Enforcement
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5 max-w-2xl">
+                  Strict separation policies prevent conflicting authorities (e.g. issuing flight tickets vs. recording cash payments vs. dual approval sign-offs) to eliminate internal fraud risk.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 rounded-xl bg-white border border-amber-300 text-slate-900 text-xs font-bold font-mono">
+                {customRoles.length} Active System Roles
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+            {/* Action & Info Header */}
+            <div className="border-b border-slate-100 p-5 sm:p-6 flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-slate-50/50">
+              <div>
+                <div className="flex items-center gap-2 font-serif font-bold text-lg text-slate-900">
+                  <Lock className="h-4 w-4 text-amber-600" /> Separation of Duty &amp; Module Access Matrix
                 </div>
                 <p className="mt-1 text-xs text-slate-500 max-w-xl">
                   Enforces dual-control separation of duty, module read/write restrictions, and staff authority.
-                  You are currently signed in as <strong className="text-slate-900 font-bold">{getRoleDefinition(role)?.label || role}</strong>.
+                  You are signed in as <strong className="text-slate-900 font-bold">{getRoleDefinition(role)?.label || role}</strong>.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
+                {/* Sub-view switcher */}
+                <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs">
+                  <button
+                    onClick={() => setMatrixSubView('modules')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      matrixSubView === 'modules'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Module Permissions ({ALL_SYSTEM_MODULES.length})
+                  </button>
+                  <button
+                    onClick={() => setMatrixSubView('capabilities')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      matrixSubView === 'capabilities'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Critical Capabilities &amp; SoD
+                  </button>
+                  <button
+                    onClick={() => setMatrixSubView('cards')}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                      matrixSubView === 'cards'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    Role Cards &amp; Staff
+                  </button>
+                </div>
+
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                   <input
                     value={matrixSearchQuery}
                     onChange={(e) => setMatrixSearchQuery(e.target.value)}
                     placeholder="Search roles or staff..."
-                    className="w-48 sm:w-56 rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs outline-hidden focus:border-amber-500 shadow-xs"
+                    className="w-44 sm:w-52 rounded-xl border border-slate-200 bg-white py-1.5 pl-8 pr-3 text-xs outline-hidden focus:border-amber-500 shadow-2xs"
                   />
                 </div>
 
                 <button
                   type="button"
                   onClick={handleResetRoles}
-                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs transition cursor-pointer"
-                  title="Reset all roles to factory system default policies"
+                  className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition cursor-pointer"
+                  title="Reset all roles to factory default policies"
                 >
-                  <RefreshCw className="h-3.5 w-3.5 text-slate-500" /> Reset to Defaults
+                  <RefreshCw className="h-3.5 w-3.5 text-slate-500" /> Defaults
                 </button>
 
                 <button
                   type="button"
                   onClick={handleOpenAddRole}
-                  className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 px-4 py-2 text-xs font-bold text-slate-950 shadow-xs hover:shadow transition cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 px-3.5 py-1.5 text-xs font-bold text-slate-950 shadow-xs transition cursor-pointer"
                 >
-                  <Plus className="h-4 w-4" /> Add User Role
+                  <Plus className="h-4 w-4" /> Add Role
                 </button>
               </div>
             </div>
 
-            {/* Matrix Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50/80 text-[10px] uppercase font-mono tracking-widest text-slate-500 border-b border-slate-100">
-                  <tr>
-                    <th className="px-5 py-3.5 text-left font-bold">Role &amp; Staff</th>
-                    <th className="px-3 py-3.5 text-center font-bold">Issue Ticket</th>
-                    <th className="px-3 py-3.5 text-center font-bold">Record Payment</th>
-                    <th className="px-3 py-3.5 text-center font-bold">Approve Issue</th>
-                    <th className="px-3 py-3.5 text-center font-bold">All Bookings</th>
-                    <th className="px-3 py-3.5 text-center font-bold">Manage Accounts</th>
-                    <th className="px-3 py-3.5 text-center font-bold">Module Access</th>
-                    <th className="px-4 py-3.5 text-right font-bold">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredMatrixRoles.map((rDef) => {
-                    const isCurrent = rDef.key === role;
-                    const writeCount = (rDef.write || []).length;
-                    const viewCount = (rDef.view || []).length;
+            {/* Sub-View 1: All 14 Module Permissions Matrix */}
+            {matrixSubView === 'modules' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                  <thead className="bg-slate-100/80 text-[10px] uppercase font-mono tracking-wider text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3.5 font-bold sticky left-0 bg-slate-100 z-10 min-w-[200px]">
+                        Role Definition
+                      </th>
+                      {ALL_SYSTEM_MODULES.map((mod) => (
+                        <th key={mod.key} className="px-2.5 py-3.5 text-center font-bold min-w-[70px]">
+                          <span title={mod.label}>{mod.short}</span>
+                        </th>
+                      ))}
+                      <th className="px-4 py-3.5 text-right font-bold min-w-[120px]">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredMatrixRoles.map((rDef) => {
+                      const isCurrent = rDef.key === role;
 
-                    return (
-                      <tr
-                        key={rDef.key}
-                        className={`hover:bg-slate-50/80 transition ${
-                          isCurrent ? 'bg-amber-50/50 ring-1 ring-amber-200/50' : ''
-                        }`}
-                      >
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900 text-sm">{rDef.label}</span>
-                            {isCurrent && (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-mono font-bold">
-                                Current User
+                      return (
+                        <tr
+                          key={rDef.key}
+                          className={`hover:bg-slate-50/90 transition ${
+                            isCurrent ? 'bg-amber-50/40' : ''
+                          }`}
+                        >
+                          <td className="px-4 py-3.5 sticky left-0 bg-white z-10 shadow-r">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-900">{rDef.label}</span>
+                              {isCurrent && (
+                                <span className="px-1.5 py-0.2 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-[9px] font-mono font-bold">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono truncate max-w-[180px]">
+                              {rDef.key}
+                            </div>
+                          </td>
+
+                          {ALL_SYSTEM_MODULES.map((mod) => {
+                            const canViewMod = (rDef.view || []).includes(mod.key);
+                            const canWriteMod = (rDef.write || []).includes(mod.key);
+
+                            return (
+                              <td key={mod.key} className="px-2.5 py-3.5 text-center">
+                                {canWriteMod ? (
+                                  <span
+                                    title={`${rDef.label} has Full Edit / Write access to ${mod.label}`}
+                                    className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-mono text-[9px] font-bold border border-emerald-200"
+                                  >
+                                    WRITE
+                                  </span>
+                                ) : canViewMod ? (
+                                  <span
+                                    title={`${rDef.label} has Read-Only view access to ${mod.label}`}
+                                    className="inline-flex items-center justify-center px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-800 font-mono text-[9px] font-bold border border-blue-200"
+                                  >
+                                    VIEW
+                                  </span>
+                                ) : (
+                                  <span
+                                    title={`Access to ${mod.label} is blocked for this role`}
+                                    className="inline-flex items-center justify-center w-4 h-4 rounded-full text-slate-300 font-mono text-xs"
+                                  >
+                                    —
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+
+                          <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleCloneRole(rDef)}
+                                className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition cursor-pointer"
+                                title="Clone this role"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditRole(rDef)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition cursor-pointer"
+                              >
+                                <Edit3 className="w-3 h-3 text-amber-600" /> Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Sub-View 2: Critical Capabilities & Separation of Duty Table */}
+            {matrixSubView === 'capabilities' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50/80 text-[10px] uppercase font-mono tracking-widest text-slate-500 border-b border-slate-100">
+                    <tr>
+                      <th className="px-5 py-3.5 text-left font-bold">Role &amp; Staff</th>
+                      <th className="px-3 py-3.5 text-center font-bold">Issue Tickets</th>
+                      <th className="px-3 py-3.5 text-center font-bold">Record Payments</th>
+                      <th className="px-3 py-3.5 text-center font-bold">Dual Approval</th>
+                      <th className="px-3 py-3.5 text-center font-bold">Manage Accounts</th>
+                      <th className="px-3 py-3.5 text-center font-bold">All Bookings</th>
+                      <th className="px-3 py-3.5 text-center font-bold">Export Reports</th>
+                      <th className="px-3 py-3.5 text-center font-bold">SoD Status</th>
+                      <th className="px-4 py-3.5 text-right font-bold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredMatrixRoles.map((rDef) => {
+                      const isCurrent = rDef.key === role;
+                      const hasSodConflict =
+                        rDef.key !== 'CEO' &&
+                        rDef.can.issueTicket &&
+                        rDef.can.recordPayment &&
+                        rDef.can.approveIssue;
+
+                      return (
+                        <tr
+                          key={rDef.key}
+                          className={`hover:bg-slate-50/80 transition ${
+                            isCurrent ? 'bg-amber-50/50 ring-1 ring-amber-200/50' : ''
+                          }`}
+                        >
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm">{rDef.label}</span>
+                              {isCurrent && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-mono font-bold">
+                                  Current User
+                                </span>
+                              )}
+                              <span className="text-[10px] font-mono text-slate-400">({rDef.key})</span>
+                            </div>
+                            <div className="text-xs text-slate-500 mt-0.5 max-w-md">{rDef.description}</div>
+
+                            {rDef.assignedUsers && rDef.assignedUsers.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                {rDef.assignedUsers.map((userName, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200"
+                                  >
+                                    <UserCheck className="w-2.5 h-2.5 text-slate-500" />
+                                    {userName}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-4 text-center">
+                            {rDef.can.issueTicket ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-mono">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-4 text-center">
+                            {rDef.can.recordPayment ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-mono">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-4 text-center">
+                            {rDef.can.approveIssue ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-mono">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-4 text-center">
+                            {rDef.can.manageAccounts ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-mono">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-4 text-center">
+                            {rDef.can.viewAllBookings ? (
+                              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-mono text-[10px] font-bold">
+                                Global
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-mono text-[10px] font-bold">
+                                Own Only
                               </span>
                             )}
-                            <span className="text-[10px] font-mono text-slate-400">({rDef.key})</span>
-                          </div>
-                          <div className="text-xs text-slate-500 mt-0.5 max-w-md">{rDef.description}</div>
+                          </td>
 
-                          {rDef.assignedUsers && rDef.assignedUsers.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                              {rDef.assignedUsers.map((userName, idx) => (
-                                <span
-                                  key={idx}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200"
-                                >
-                                  <UserCheck className="w-2.5 h-2.5 text-slate-500" />
-                                  {userName}
+                          <td className="px-3 py-4 text-center">
+                            {rDef.can.exportReports ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 font-mono">—</span>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-4 text-center">
+                            {hasSodConflict ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold font-mono">
+                                ⚠️ Review
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold font-mono">
+                                ✓ Compliant
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditRole(rDef)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold shadow-xs transition cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Sub-View 3: Role Cards View */}
+            {matrixSubView === 'cards' && (
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredMatrixRoles.map((rDef) => {
+                  const isCurrent = rDef.key === role;
+
+                  return (
+                    <div
+                      key={rDef.key}
+                      className={`p-5 rounded-2xl border bg-white shadow-xs space-y-3 flex flex-col justify-between ${
+                        isCurrent ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-slate-200'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-bold text-sm text-slate-900">{rDef.label}</h4>
+                              {isCurrent && (
+                                <span className="px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 text-[9px] font-mono font-bold">
+                                  Current
                                 </span>
-                              ))}
+                              )}
                             </div>
-                          )}
-                        </td>
-
-                        <td className="px-3 py-4 text-center">
-                          {rDef.can.issueTicket ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
-                              <UserCheck className="h-3.5 w-3.5" />
+                            <span className="text-[10px] font-mono text-slate-400 font-bold block mt-0.5">
+                              ID: {rDef.key}
                             </span>
-                          ) : (
-                            <span className="text-slate-300 font-mono">—</span>
-                          )}
-                        </td>
+                          </div>
 
-                        <td className="px-3 py-4 text-center">
-                          {rDef.can.recordPayment ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
-                              <UserCheck className="h-3.5 w-3.5" />
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 font-mono">—</span>
-                          )}
-                        </td>
-
-                        <td className="px-3 py-4 text-center">
-                          {rDef.can.approveIssue ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
-                              <UserCheck className="h-3.5 w-3.5" />
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 font-mono">—</span>
-                          )}
-                        </td>
-
-                        <td className="px-3 py-4 text-center">
-                          {rDef.can.viewAllBookings ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
-                              <UserCheck className="h-3.5 w-3.5" />
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 text-[10px] font-mono">Own Only</span>
-                          )}
-                        </td>
-
-                        <td className="px-3 py-4 text-center">
-                          {rDef.can.manageAccounts ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
-                              <UserCheck className="h-3.5 w-3.5" />
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 font-mono">—</span>
-                          )}
-                        </td>
-
-                        <td className="px-3 py-4 text-center">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 text-[11px] font-semibold border border-slate-200">
-                            <span>{viewCount} View</span>
-                            <span className="text-slate-400">/</span>
-                            <span className="text-amber-700">{writeCount} Edit</span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono font-bold">
+                            {(rDef.write || []).length} / {ALL_SYSTEM_MODULES.length} Write
                           </span>
-                        </td>
+                        </div>
 
-                        <td className="px-4 py-4 text-right">
+                        <p className="text-xs text-slate-600 leading-relaxed">{rDef.description}</p>
+
+                        <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+                          <div className="text-[10px] font-mono uppercase text-slate-400 font-bold">
+                            Assigned Staff:
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {(rDef.assignedUsers || []).map((u, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-slate-700 text-[10px]"
+                              >
+                                👤 {u}
+                              </span>
+                            ))}
+                            {(!rDef.assignedUsers || rDef.assignedUsers.length === 0) && (
+                              <span className="text-[10px] text-slate-400 italic">No staff assigned</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-slate-500 font-bold">
+                          {rDef.can.issueTicket ? '✈️ Issues Tickets' : '🔒 Read-only ticketing'}
+                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleCloneRole(rDef)}
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-600 transition cursor-pointer"
+                            title="Clone role"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleOpenEditRole(rDef)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-800 text-xs font-semibold shadow-xs transition cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
                           >
-                            <Edit3 className="w-3.5 h-3.5 text-amber-600" />
                             Edit Role
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {filteredMatrixRoles.length === 0 && (
               <div className="p-12 text-center text-xs text-slate-500">

@@ -1,9 +1,27 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      (function() {
+        try {
+          var origFetch = typeof window !== 'undefined' ? window.fetch : null;
+          if (origFetch) {
+            var currentFetch = origFetch;
+            try {
+              Object.defineProperty(window, 'fetch', {
+                configurable: true,
+                enumerable: true,
+                get: function() { return currentFetch; },
+                set: function(fn) { currentFetch = fn; }
+              });
+            } catch (_) {}
+          }
+        } catch (_) {}
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EritreaVisit — Tour Operations Suite</title>
+    <title>EritreaVisit Operations Hub</title>
     <meta name="description" content="EritreaVisit operations suite — tours, hotels, fleet, ticketing, visas, HR, finance and audit controls for eritreavisit.com." />
     <link rel="icon" type="image/svg+xml" href="/brand/mark.svg" />
     <link rel="apple-touch-icon" href="/brand/eritreavisit-logo.jpg" />

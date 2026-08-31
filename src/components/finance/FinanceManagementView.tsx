@@ -1262,7 +1262,7 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
                         className="hidden"
                       />
 
-                      {receiptUrl ? (
+                      {receiptUrl && receiptUrl.trim() !== '' ? (
                         <div className="flex items-center gap-3 min-w-0">
                           {receiptUrl.startsWith('data:image') ? (
                             <img
@@ -1648,7 +1648,7 @@ export const FinanceManagementView: React.FC<FinanceManagementViewProps> = ({
                     </span>
                   </div>
 
-                  {activeVoucherTxn.receiptUrl.startsWith('data:image') ? (
+                  {activeVoucherTxn.receiptUrl && activeVoucherTxn.receiptUrl.trim() !== '' && activeVoucherTxn.receiptUrl.startsWith('data:image') ? (
                     <div className="rounded-xl overflow-hidden border border-slate-200 bg-white p-2">
                       <img
                         src={activeVoucherTxn.receiptUrl}

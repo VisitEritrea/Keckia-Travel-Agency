@@ -43,7 +43,6 @@ import {
   FamilyMemberRecord,
   ExpeditionScheduleDay,
 } from './AddTouristExpeditionModal';
-import { mockHotels, mockEmployees, mockVehicles } from '../../mockData';
 
 interface TourPackagesViewProps {
   packages?: TourPackage[];
@@ -70,108 +69,16 @@ interface TourPackagesViewProps {
   onDeleteBooking?: (id: string) => void;
 }
 
-export const NEW_SAMPLE_EXPEDITION: TouristExpedition = {
-  id: 'exp-ops-001',
-  leadName: 'Dr. Arthur Pendelton',
-  situation: 'Single',
-  partyTitle: 'Dr. Arthur Pendelton — Central Highlands & Red Sea Archaeology',
-  paxCount: 1,
-  isVip: true,
-  nationality: 'British',
-  occupation: 'Professor of Horn of Africa Archaeology',
-  passportNumber: 'GB98234112',
-  passportExpiry: '2029-11-20',
-  email: 'arthur.pendelton@oxford.ac.uk',
-  phone: '+44 7700 900123',
-  dietary: 'Vegetarian / Organic Only',
-  avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-  travelerStatus: 'Active Traveler',
-  emergencyContact: {
-    name: 'Almaz Abraham',
-    relation: 'Spouse',
-    phone: '+44 7700 900124',
-  },
-  familyMembers: [],
-  daysPlanned: 4,
-  routeSummary: 'Asmara Modernist Architecture → Segheneyti → Qohaito Ruins → Massawa Old Port & Green Island',
-  schedule: [
-    {
-      dayNumber: 1,
-      title: 'UNESCO Asmara Architectural Survey & Historic Railways',
-      location: 'Asmara (Central / Maekel)',
-      lodging: 'Hotel Asmara Palace',
-      mealPlan: 'Breakfast',
-      transport: 'Toyota Land Cruiser V8 Prado (Plate: ER-2-18492)',
-      activities: 'Field inspection of Fiat Tagliero, Cinema Impero, and steam locomotive maintenance depot.',
-    },
-    {
-      dayNumber: 2,
-      title: 'Segheneyti Giant Sycamore & Pre-Aksumite Qohaito Plateau',
-      location: 'Segheneyti & Qohaito Plateau (Debub)',
-      lodging: 'Adi Keyh Archaeological Mountain Lodge',
-      mealPlan: 'Full Board',
-      transport: '4WD Expedition Convoy',
-      activities: 'Rock art surveying at Adi Alauti canyon, Temple of Mariam Wakiro, and Egyptian Tomb excavations.',
-    },
-    {
-      dayNumber: 3,
-      title: 'Metera Stele & Descent via Filfil Solomuna Cloud Forest',
-      location: 'Metera (Senafe) & Filfil Solomuna Escarpment',
-      lodging: 'Massawa Grand Dahlak Hotel',
-      mealPlan: 'Half Board',
-      transport: 'Toyota Land Cruiser V8 Prado',
-      activities: 'Highland flora birdwatching, lush rainforest descent, and evening arrival at the Red Sea port.',
-    },
-    {
-      dayNumber: 4,
-      title: 'Ottoman Old Town Massawa & Coral Reef Survey',
-      location: 'Massawa Harbor & Sheikh Said Island',
-      lodging: 'Massawa Grand Dahlak Hotel',
-      mealPlan: 'Full Board',
-      transport: 'Marine Speedboat Vessel & 4WD',
-      activities: 'Coral biodiversity monitoring and archival photography of Turkish-Ottoman coral-block palaces.',
-    },
-  ],
-  hotelIncluded: true,
-  hotelId: 'hotel-001',
-  hotelName: 'Hotel Asmara Palace',
-  roomType: 'Deluxe Suite with Balcony',
-  checkIn: '2026-08-25',
-  checkOut: '2026-08-29',
-  roomsCount: 1,
-  pricePerNightUSD: 160,
-  totalHotelUSD: 640,
-  hotelStatus: 'Reserved',
-  voucherIssued: true,
-  guideId: 'emp-001',
-  guideName: 'Yemane Berhe',
-  guidePhone: '+291 7 123456',
-  guideLanguages: ['Tigrinya', 'English', 'Italian'],
-  driverId: 'emp-004',
-  driverName: 'Habte Michael',
-  driverPhone: '+291 7 334455',
-  driverLicenseValid: true,
-  vehicleId: 'veh-001',
-  vehicleName: 'Toyota Land Cruiser V8 Prado 4WD #1',
-  vehiclePlate: 'ER-2-18492',
-  vehicleCap: 5,
-  vehicleType: '4WD SUV Convoy',
-  staffStatus: 'Assigned',
-  createdAt: '2026-08-21',
-};
-
-const INITIAL_EXPEDITIONS: TouristExpedition[] = [NEW_SAMPLE_EXPEDITION];
-
 export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
-  hotels = mockHotels,
-  employees = mockEmployees,
-  vehicles = mockVehicles,
-  expeditions: propExpeditions,
+  hotels = [],
+  employees = [],
+  vehicles = [],
+  expeditions: propExpeditions = [],
   onSaveExpedition,
   onDeleteExpedition,
 }) => {
   // State for all expeditions
-  const [expeditions, setExpeditions] = useState<TouristExpedition[]>(propExpeditions || INITIAL_EXPEDITIONS);
+  const [expeditions, setExpeditions] = useState<TouristExpedition[]>(propExpeditions || []);
 
   // Keep in sync with parent prop if provided
   useEffect(() => {
@@ -250,14 +157,6 @@ export const TourPackagesView: React.FC<TourPackagesViewProps> = ({
   const handleClearAll = () => {
     if (confirm('Are you sure you want to remove all tourist operations data?')) {
       setExpeditions([]);
-    }
-  };
-
-  // Reset to form-generated sample
-  const handleResetSample = () => {
-    setExpeditions([NEW_SAMPLE_EXPEDITION]);
-    if (onSaveExpedition) {
-      onSaveExpedition(NEW_SAMPLE_EXPEDITION);
     }
   };
 

@@ -1,4 +1,4 @@
-export type StaffRole = 'Admin' | 'Tour Guide' | 'Agent' | 'HR' | 'Logistics Lead' | 'Operations Manager';
+export type StaffRole = 'Admin' | 'Tour Guide' | 'Driver' | 'Agent' | 'HR' | 'Logistics Lead' | 'Operations Manager' | 'Accountant' | 'CEO';
 export type StaffStatus = 'Active' | 'On Leave' | 'On Tour' | 'Probation';
 export type SalaryTier = 'Tier 1 - Senior Lead' | 'Tier 2 - Specialist' | 'Tier 3 - Associate' | 'Contractor';
 

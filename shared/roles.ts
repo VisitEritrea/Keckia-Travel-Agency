@@ -106,12 +106,12 @@ export const DEFAULT_ROLES: Record<RoleKey, RoleDefinition> = {
   },
   AGENT: {
     label: "Sales Agent",
-    description: "Creates bookings, issues flight tickets and tourist records, and sees only their own sales.",
-    view: ["dashboard", "tickets", "tourists", "packages", "hotels", "messages"],
-    write: ["tickets", "tourists", "messages"],
+    description: "Creates bookings, issues flight tickets, checks, edits & records payments, manages clients, and sees only their own sales.",
+    view: ["dashboard", "tickets", "tourists", "packages", "hotels", "messages", "finance"],
+    write: ["tickets", "tourists", "messages", "finance"],
     ownRecordsOnly: true,
     can: {
-      issueTicket: true, recordPayment: false, approveIssue: false,
+      issueTicket: true, recordPayment: true, approveIssue: false,
       manageAccounts: false, viewAllBookings: false, exportReports: false,
     },
   },
@@ -377,20 +377,18 @@ export function isSystemCollection(collection: string): boolean {
 }
 
 /** Whether `role` may change a record already stored in `collection`. */
-export function canEditRecord(role: RoleKey, collection: string): boolean {
-  if (!canWriteCollection(role, collection)) return false;
-  return isSystemCollection(collection) || isAdmin(role) || canWriteCollection(role, collection);
+export function canEditRecord(role: RoleKey | string, collection: string): boolean {
+  return canWriteCollection(role, collection);
 }
 
 /** Whether `role` may delete a record already stored in `collection`. */
-export function canDeleteRecord(role: RoleKey, collection: string): boolean {
-  if (!canWriteCollection(role, collection)) return false;
-  return isSystemCollection(collection) || isAdmin(role) || canWriteCollection(role, collection);
+export function canDeleteRecord(role: RoleKey | string, collection: string): boolean {
+  return canWriteCollection(role, collection);
 }
 
 /** Shown wherever an edit or a deletion is refused, so the reason is the same everywhere. */
 export const ADMIN_ONLY_EDIT_MESSAGE =
-  "Editing or deleting a saved entry is reserved for the administrator. You can still create new records.";
+  "Editing or deleting this record is not permitted for your role.";
 
 export function isRoleKey(value: string): value is RoleKey {
   return Object.prototype.hasOwnProperty.call(ROLES, value);

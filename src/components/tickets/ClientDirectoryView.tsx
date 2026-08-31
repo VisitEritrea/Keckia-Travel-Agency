@@ -315,7 +315,7 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <img
-                          src={client.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'}
+                          src={client.avatar?.trim() || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'}
                           alt={client.fullName}
                           className="w-11 h-11 rounded-full object-cover border border-slate-200 shrink-0"
                         />
@@ -379,7 +379,7 @@ export const ClientDirectoryView: React.FC<ClientDirectoryViewProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <img
-                      src={activeClient.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'}
+                      src={activeClient.avatar?.trim() || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'}
                       alt={activeClient.fullName}
                       className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-sm"
                     />

@@ -24,10 +24,37 @@ import {
 } from '../mockData';
 
 /**
- * The optional starter dataset, keyed by the collection names the API stores.
- * It is only ever written into collections that are still completely empty.
+ * The starter dataset, initialized cleanly with empty arrays for production use.
  */
 export const STARTER_COLLECTIONS: Record<string, any[]> = {
+  departments: [],
+  employees: [],
+  packages: [],
+  activities: [],
+  schedules: [],
+  tourists: [],
+  bookings: [],
+  tickets: [],
+  ticketingClients: [],
+  visaDocs: [],
+  permits: [],
+  notifications: [],
+  vehicles: [],
+  hotels: [],
+  reservations: [],
+  hotelLetters: [],
+  rentalLetters: [],
+  channels: [],
+  messages: [],
+  financialTransactions: [],
+  financialInvoices: [],
+  receipts: [],
+  touristActivities: [],
+  tourBookings: [],
+  expeditions: [],
+};
+
+export const DEMO_SAMPLE_COLLECTIONS: Record<string, any[]> = {
   departments: mockDepartments,
   employees: mockEmployees,
   packages: mockPackages,
@@ -53,12 +80,12 @@ export const STARTER_COLLECTIONS: Record<string, any[]> = {
 };
 
 /**
- * The ids the starter dataset occupies, per collection. Clearing sends this so
+ * The ids the legacy starter dataset occupied, per collection. Clearing sends this so
  * the server removes the sample records and nothing else — anything the agency
  * has entered itself keeps its place.
  */
 export const STARTER_IDS: Record<string, string[]> = Object.fromEntries(
-  Object.entries(STARTER_COLLECTIONS).map(([collection, rows]) => [
+  Object.entries(DEMO_SAMPLE_COLLECTIONS).map(([collection, rows]) => [
     collection,
     rows.map((row) => row?.id).filter((id): id is string => Boolean(id)),
   ]),

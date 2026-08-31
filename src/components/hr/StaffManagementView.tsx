@@ -13,6 +13,7 @@ import { Department, Employee, StaffStatus, TourSchedule } from '../../types';
 import { Avatar } from '../ui/Kit';
 import { EmployeeModal } from './EmployeeModal';
 import { AddEmployeeModal } from './AddEmployeeModal';
+import { StaffActivityTaskManager } from './StaffActivityTaskManager';
 import { exportToCSV } from '../../utils/exportUtils';
 
 interface StaffManagementViewProps {
@@ -143,6 +144,14 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
         </div>
       </div>
 
+      {/* Staff Activity Tracking & Task Management Suite */}
+      <StaffActivityTaskManager
+        employees={employees}
+        schedules={schedules}
+        onUpdateEmployeeStatus={onUpdateEmployeeStatus}
+        onOpenEmployeeDossier={(empId) => setActiveEmployeeId(empId)}
+      />
+
       {/* Department Hierarchy Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {deptList.map((dept) => {
@@ -181,7 +190,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
       <div className="p-4 sm:p-5 rounded-[2rem] bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Role Pills */}
         <div className="flex flex-wrap items-center gap-1.5">
-          {['all', 'Tour Guide', 'Operations Manager', 'Agent', 'HR', 'Logistics Lead', 'Admin'].map((role) => (
+          {['all', 'Tour Guide', 'Driver', 'Operations Manager', 'Agent', 'HR', 'Accountant', 'Logistics Lead', 'Admin'].map((role) => (
             <button
               key={role}
               onClick={() => setSelectedRole(role)}

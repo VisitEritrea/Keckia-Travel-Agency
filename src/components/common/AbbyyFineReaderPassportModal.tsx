@@ -6,6 +6,7 @@ import {
   UploadCloud,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   RotateCw,
   Sliders,
   ZoomIn,
@@ -25,6 +26,7 @@ import {
   Building,
   Calendar,
   Globe,
+  Trash2,
 } from 'lucide-react';
 import {
   runAbbyyFineReaderEngine,
@@ -34,7 +36,7 @@ import {
   AbbyyOcrBlock,
   parseTd3Mrz,
 } from '../../utils/abbyyFineReaderEngine';
-import { SAMPLE_DOCUMENTS, SampleDocument, ScannedTouristData } from '../../utils/documentScanner';
+import { ScannedTouristData } from '../../utils/documentScanner';
 
 interface AbbyyFineReaderPassportModalProps {
   isOpen: boolean;
@@ -69,7 +71,7 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [showLayoutZones, setShowLayoutZones] = useState<boolean>(true);
 
-  // Recognition result
+  // Recognition result & editable data (defaults to blank)
   const [recognitionResult, setRecognitionResult] = useState<AbbyyRecognitionResult | null>(null);
   const [editableData, setEditableData] = useState<ScannedTouristData>({});
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -80,12 +82,30 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const originalImageRef = useRef<HTMLImageElement | null>(null);
 
-  // Initialize with sample 1 if modal is opened without an active document
+  // Reset all state and ensure form fields are completely blank when modal is opened or closed
   useEffect(() => {
-    if (isOpen && !imagePreviewUrl && !selectedFile) {
-      loadSample(SAMPLE_DOCUMENTS[0]);
+    if (!isOpen) {
+      handleClearForm();
     }
   }, [isOpen]);
+
+  const handleClearForm = () => {
+    setSelectedFile(null);
+    setImagePreviewUrl('');
+    setIsProcessing(false);
+    setProcessStatus('');
+    setProcessProgress(0);
+    setRecognitionResult(null);
+    setEditableData({});
+    setActiveZoneId(null);
+    setRotation(0);
+    setGrayscale(false);
+    setBinarize(false);
+    setContrastBoost(15);
+    setBrightness(0);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+  };
 
   // Update canvas preview when visual filters change
   useEffect(() => {
@@ -128,8 +148,12 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
     }
   };
 
+  const [dragOver, setDragOver] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const handleFileSelect = (file: File) => {
     if (!file) return;
+    setErrorMessage(null);
     setSelectedFile(file);
 
     const reader = new FileReader();
@@ -141,98 +165,9 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
     reader.readAsDataURL(file);
   };
 
-  const loadSample = (sample: SampleDocument) => {
-    setImagePreviewUrl(sample.thumbnailUrl);
-    setSelectedFile(null);
-
-    // Run simulated ABBYY recognition with sample data
-    setIsProcessing(true);
-    setProcessStatus('ABBYY FineReader Engine: Loading high-resolution document stream...');
-    setProcessProgress(25);
-
-    setTimeout(() => {
-      setProcessStatus('ABBYY FineReader Engine: Performing layout segmentation & Otsu binarization...');
-      setProcessProgress(60);
-
-      setTimeout(() => {
-        setProcessStatus('ABBYY FineReader Engine: Validating ICAO Doc 9303 checksums & confidence scoring...');
-        setProcessProgress(90);
-
-        setTimeout(() => {
-          const result: AbbyyRecognitionResult = {
-            engineVersion: 'ABBYY® FineReader Engine 12.5 Core OCR',
-            profileUsed: profile || 'Passport_MRZ_TD3',
-            processingTimeMs: 420,
-            overallConfidence: sample.extractedData.confidenceScore || 99,
-            rawText: `[DOCUMENT HEADER]\n${sample.title}\n[MACHINE READABLE ZONE]\n${sample.extractedData.passportNumber} << ${sample.extractedData.fullName}`,
-            lines: [sample.title, sample.subtitle],
-            mrzDetected: true,
-            mrzType: 'TD3',
-            mrzChecksumValid: true,
-            checksumDetails: {
-              passportNumberValid: true,
-              dobValid: true,
-              expiryValid: true,
-              compositeValid: true,
-            },
-            zones: [
-              {
-                id: 'zone-hdr',
-                type: 'header',
-                label: 'Document Header',
-                confidence: 99.4,
-                box: { x: 4, y: 4, width: 92, height: 12 },
-                text: `${sample.extractedData.nationality?.toUpperCase()} PASSPORT / PASSEPORT`,
-                verified: true,
-              },
-              {
-                id: 'zone-pic',
-                type: 'photo',
-                label: 'Biometric Photo ID',
-                confidence: 99.9,
-                box: { x: 6, y: 18, width: 26, height: 48 },
-                text: '[Biometric Facial Match: 99.9%]',
-                verified: true,
-              },
-              {
-                id: 'zone-pers',
-                type: 'personal_data',
-                label: 'Personal Data Fields',
-                confidence: 98.8,
-                box: { x: 35, y: 18, width: 60, height: 48 },
-                text: `Name: ${sample.extractedData.fullName}\nNationality: ${sample.extractedData.nationality}\nPassport: ${sample.extractedData.passportNumber}`,
-                verified: true,
-              },
-              {
-                id: 'zone-mrz',
-                type: 'mrz',
-                label: 'ICAO Doc 9303 MRZ Strip',
-                confidence: 99.7,
-                box: { x: 4, y: 70, width: 92, height: 26 },
-                text: `P<${(sample.extractedData.nationality || 'ERI').slice(0, 3).toUpperCase()}${sample.extractedData.fullName?.replace(/\s+/g, '<').toUpperCase()}<<<<<<<<<<<<<<<<<<<\n${(sample.extractedData.passportNumber || '').padEnd(9, '<')}0${(sample.extractedData.nationality || 'ERI').slice(0, 3).toUpperCase()}8001014M3101018<<<<<<<<<<<<<<06`,
-                verified: true,
-              },
-            ],
-            extractedData: {
-              ...sample.extractedData,
-              detectedDocumentType: 'ABBYY FineReader Verified Passport',
-              confidenceScore: 99,
-            },
-            characterConfidenceAverage: 99.1,
-          };
-
-          setRecognitionResult(result);
-          setEditableData(result.extractedData);
-          setIsProcessing(false);
-          setProcessStatus('');
-          setProcessProgress(100);
-        }, 300);
-      }, 350);
-    }, 300);
-  };
-
   const executeAbbyyOcr = async (file: File, previewDataUrl?: string) => {
     setIsProcessing(true);
+    setErrorMessage(null);
     setProcessStatus('ABBYY FineReader Engine: Initializing document stream...');
     setProcessProgress(10);
 
@@ -256,12 +191,32 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
       );
 
       setRecognitionResult(result);
-      setEditableData(result.extractedData);
-    } catch (err) {
+      if (result.extractedData) {
+        setEditableData(result.extractedData);
+      }
+    } catch (err: any) {
       console.error('ABBYY FineReader execution error:', err);
+      setErrorMessage(err?.message || 'Document scanning failed. Please try a clearer image.');
     } finally {
       setIsProcessing(false);
       setProcessStatus('');
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
     }
   };
 
@@ -299,7 +254,7 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                 </span>
                 <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 font-bold">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  ICAO 9303 MRZ Validated
+                  ICAO 9303 MRZ Engine
                 </span>
               </div>
               <h2 className="text-lg sm:text-xl font-bold font-serif text-white tracking-tight mt-0.5">
@@ -339,30 +294,29 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
             </select>
           </div>
 
-          {/* Sample quick-pickers */}
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-            <span className="text-slate-500 font-medium text-[11px] mr-1">Sample Passports:</span>
-            {SAMPLE_DOCUMENTS.map((sample) => (
-              <button
-                key={sample.id}
-                type="button"
-                onClick={() => loadSample(sample)}
-                className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-red-400 hover:bg-red-50 text-[11px] font-bold text-slate-700 transition flex items-center gap-1 shrink-0 shadow-2xs cursor-pointer"
-              >
-                <span>{sample.countryFlag}</span>
-                <span className="truncate max-w-[110px]">{sample.title.split('—')[0].trim()}</span>
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleClearForm}
+              className="px-3 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-600 hover:text-red-600 text-[11px] font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              title="Clear all inputs and reset form to blank"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Clear Form</span>
+            </button>
+            <span className="text-[11px] font-mono text-slate-500 hidden sm:inline-block">
+              Upload / scan document to auto-extract fields
+            </span>
           </div>
         </div>
 
         {/* Main Content Area */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-y-auto min-h-0">
-          {/* Left Panel: Document Preview & Visual Adjustment Controls (6 cols) */}
+          {/* Left Panel: Document Preview & Visual Adjustment Controls (7 cols) */}
           <div className="lg:col-span-7 p-5 bg-slate-900 text-white flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 overflow-y-auto">
-            {/* Top Toolbar: File Upload & Camera */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
+            {/* Top Toolbar: File Upload, Camera & Re-Scan */}
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -377,9 +331,9 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
-                  <UploadCloud className="w-3.5 h-3.5" />
+                  <UploadCloud className="w-4 h-4" />
                   Upload Document / Passport
                 </button>
 
@@ -398,32 +352,61 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                 <button
                   type="button"
                   onClick={() => cameraInputRef.current?.click()}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Camera className="w-3.5 h-3.5" />
+                  <Camera className="w-4 h-4" />
                   Live Camera
                 </button>
+
+                {selectedFile && (
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={() => executeAbbyyOcr(selectedFile, imagePreviewUrl || undefined)}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                    title="Re-run ABBYY recognition with current preprocessing filters"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
+                    Re-Scan
+                  </button>
+                )}
               </div>
 
               {/* Layout Zone toggler */}
-              <button
-                type="button"
-                onClick={() => setShowLayoutZones(!showLayoutZones)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition flex items-center gap-1 cursor-pointer ${
-                  showLayoutZones
-                    ? 'bg-red-950/80 border-red-500 text-red-300'
-                    : 'bg-slate-800 border-slate-700 text-slate-400'
-                }`}
-              >
-                <Layers className="w-3 h-3" />
-                ABBYY Recognition Zones
-              </button>
+              {imagePreviewUrl && (
+                <button
+                  type="button"
+                  onClick={() => setShowLayoutZones(!showLayoutZones)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition flex items-center gap-1 cursor-pointer ${
+                    showLayoutZones
+                      ? 'bg-red-950/80 border-red-500 text-red-300'
+                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  <Layers className="w-3 h-3" />
+                  ABBYY Zones
+                </button>
+              )}
             </div>
 
-            {/* Live Canvas Viewer with Zone Overlays */}
-            <div className="relative flex-1 min-h-[300px] bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-center p-3 overflow-hidden group">
+            {errorMessage && (
+              <div className="mb-3 p-3 rounded-xl bg-red-950/80 border border-red-500/60 text-red-200 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Live Canvas Viewer / Blank Upload Prompt */}
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`relative flex-1 min-h-[320px] bg-slate-950 rounded-2xl border transition-all flex items-center justify-center p-4 overflow-hidden group ${
+                dragOver ? 'border-red-500 ring-2 ring-red-500/40 bg-slate-900' : 'border-slate-800'
+              }`}
+            >
               {isProcessing && (
-                <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center z-30 p-6 text-center">
+                <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-xs flex flex-col items-center justify-center z-30 p-6 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-red-600/20 border border-red-500/50 flex items-center justify-center mb-3 animate-pulse">
                     <Cpu className="w-7 h-7 text-red-400 animate-spin" />
                   </div>
@@ -440,45 +423,67 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                 </div>
               )}
 
-              {/* Processed HTML5 Canvas */}
-              <div
-                className="relative max-w-full max-h-[380px] transition-transform duration-150"
-                style={{ transform: `scale(${zoomLevel})` }}
-              >
-                <canvas
-                  ref={canvasRef}
-                  className="max-w-full max-h-[360px] object-contain rounded-xl shadow-lg border border-slate-800"
-                />
+              {!imagePreviewUrl ? (
+                /* Blank State Dropzone */
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-full min-h-[260px] border-2 border-dashed border-slate-700 hover:border-red-500/60 bg-slate-900/50 hover:bg-slate-900/80 rounded-xl flex flex-col items-center justify-center p-6 text-center transition cursor-pointer group"
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-slate-800 border border-slate-700 group-hover:bg-red-950/40 group-hover:border-red-500/40 flex items-center justify-center mb-3 transition">
+                    <UploadCloud className="w-7 h-7 text-slate-400 group-hover:text-red-400 transition" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-200">No Document Loaded</h4>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                    Upload a passport photo, scanned ID image (JPG, PNG, TIFF) or PDF to execute ABBYY® FineReader OCR extraction.
+                  </p>
+                  <div className="mt-4 flex items-center gap-2">
+                    <span className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs">
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      Browse Passport File
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                /* Processed HTML5 Canvas */
+                <div
+                  className="relative max-w-full max-h-[380px] transition-transform duration-150"
+                  style={{ transform: `scale(${zoomLevel})` }}
+                >
+                  <canvas
+                    ref={canvasRef}
+                    className="max-w-full max-h-[360px] object-contain rounded-xl shadow-lg border border-slate-800"
+                  />
 
-                {/* Recognition Zones Highlight Overlays */}
-                {showLayoutZones &&
-                  recognitionResult?.zones.map((zone) => (
-                    <div
-                      key={zone.id}
-                      onClick={() => setActiveZoneId(zone.id)}
-                      className={`absolute border-2 rounded transition-all cursor-pointer ${
-                        zone.type === 'mrz'
-                          ? 'border-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/30'
-                          : zone.type === 'photo'
-                          ? 'border-blue-400 bg-blue-500/15 hover:bg-blue-500/30'
-                          : zone.type === 'header'
-                          ? 'border-amber-400 bg-amber-500/15 hover:bg-amber-500/30'
-                          : 'border-red-400 bg-red-500/15 hover:bg-red-500/30'
-                      } ${activeZoneId === zone.id ? 'ring-2 ring-white ring-offset-1' : ''}`}
-                      style={{
-                        left: `${zone.box.x}%`,
-                        top: `${zone.box.y}%`,
-                        width: `${zone.box.width}%`,
-                        height: `${zone.box.height}%`,
-                      }}
-                      title={`${zone.label} (Confidence: ${zone.confidence}%)`}
-                    >
-                      <span className="absolute top-0 left-0 text-[8px] font-mono font-bold bg-slate-900/90 text-white px-1 rounded-br">
-                        {zone.label} · {zone.confidence}%
-                      </span>
-                    </div>
-                  ))}
-              </div>
+                  {/* Recognition Zones Highlight Overlays */}
+                  {showLayoutZones &&
+                    recognitionResult?.zones.map((zone) => (
+                      <div
+                        key={zone.id}
+                        onClick={() => setActiveZoneId(zone.id)}
+                        className={`absolute border-2 rounded transition-all cursor-pointer ${
+                          zone.type === 'mrz'
+                            ? 'border-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/30'
+                            : zone.type === 'photo'
+                            ? 'border-blue-400 bg-blue-500/15 hover:bg-blue-500/30'
+                            : zone.type === 'header'
+                            ? 'border-amber-400 bg-amber-500/15 hover:bg-amber-500/30'
+                            : 'border-red-400 bg-red-500/15 hover:bg-red-500/30'
+                        } ${activeZoneId === zone.id ? 'ring-2 ring-white ring-offset-1' : ''}`}
+                        style={{
+                          left: `${zone.box.x}%`,
+                          top: `${zone.box.y}%`,
+                          width: `${zone.box.width}%`,
+                          height: `${zone.box.height}%`,
+                        }}
+                        title={`${zone.label} (Confidence: ${zone.confidence}%)`}
+                      >
+                        <span className="absolute top-0 left-0 text-[8px] font-mono font-bold bg-slate-900/90 text-white px-1 rounded-br">
+                          {zone.label} · {zone.confidence}%
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
 
             {/* ABBYY FineReader Preprocessing Toolkit */}
@@ -572,47 +577,79 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
           <div className="lg:col-span-5 p-6 bg-white flex flex-col justify-between overflow-y-auto space-y-5">
             <div>
               {/* Recognition Score Badge & Engine Status */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-red-50 via-slate-50 to-amber-50 border border-red-200/80 mb-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-red-800 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
-                      ABBYY® OCR Engine Confidence
-                    </span>
-                    <p className="text-2xl font-bold font-serif text-slate-900 mt-1">
-                      {recognitionResult?.overallConfidence || 99}% Accuracy
-                    </p>
+              {recognitionResult ? (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-red-50 via-slate-50 to-amber-50 border border-red-200/80 mb-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-red-800 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                        ABBYY® OCR Engine Confidence
+                      </span>
+                      <p className="text-2xl font-bold font-serif text-slate-900 mt-1">
+                        {recognitionResult.overallConfidence || 99}% Accuracy
+                      </p>
+                    </div>
+                    <div className="text-right font-mono text-[10px] text-slate-600">
+                      <p className="font-bold text-emerald-700 flex items-center justify-end gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Checksum Valid
+                      </p>
+                      <p className="mt-0.5">{recognitionResult.processingTimeMs || 380}ms compute</p>
+                    </div>
                   </div>
-                  <div className="text-right font-mono text-[10px] text-slate-600">
-                    <p className="font-bold text-emerald-700 flex items-center justify-end gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Checksum Valid
-                    </p>
-                    <p className="mt-0.5">{recognitionResult?.processingTimeMs || 380}ms compute</p>
-                  </div>
-                </div>
 
-                {/* Check-digit diagnostics */}
-                <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-red-100 text-[10px] font-mono">
-                  <div className="bg-white/80 p-1.5 rounded-lg border border-red-100 text-center">
-                    <span className="text-slate-500 block">Doc No Check</span>
-                    <span className="text-emerald-700 font-bold">PASS (7-3-1)</span>
-                  </div>
-                  <div className="bg-white/80 p-1.5 rounded-lg border border-red-100 text-center">
-                    <span className="text-slate-500 block">DOB Check</span>
-                    <span className="text-emerald-700 font-bold">PASS</span>
-                  </div>
-                  <div className="bg-white/80 p-1.5 rounded-lg border border-red-100 text-center">
-                    <span className="text-slate-500 block">Expiry Check</span>
-                    <span className="text-emerald-700 font-bold">PASS</span>
+                  {/* Check-digit diagnostics */}
+                  <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-red-100 text-[10px] font-mono">
+                    <div className="bg-white/80 p-1.5 rounded-lg border border-red-100 text-center">
+                      <span className="text-slate-500 block">Doc No Check</span>
+                      <span className="text-emerald-700 font-bold">PASS (7-3-1)</span>
+                    </div>
+                    <div className="bg-white/80 p-1.5 rounded-lg border border-red-100 text-center">
+                      <span className="text-slate-500 block">DOB Check</span>
+                      <span className="text-emerald-700 font-bold">PASS</span>
+                    </div>
+                    <div className="bg-white/80 p-1.5 rounded-lg border border-red-100 text-center">
+                      <span className="text-slate-500 block">Expiry Check</span>
+                      <span className="text-emerald-700 font-bold">PASS</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 mb-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-600 bg-slate-200/80 px-2 py-0.5 rounded-full">
+                        ABBYY® OCR Engine Status
+                      </span>
+                      <p className="text-lg font-bold font-serif text-slate-800 mt-1">
+                        Form Blank / Awaiting Document
+                      </p>
+                    </div>
+                    <div className="text-right font-mono text-[10px] text-slate-500">
+                      <span>Ready to scan</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Upload or take a photo of a traveler passport or ID card. The engine will automatically populate all fields below with high-precision OCR.
+                  </p>
+                </div>
+              )}
 
               {/* Recognized Structured Fields */}
               <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-red-600" />
-                  Verified Extracted Passport Data
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-red-600" />
+                    Traveler Passport Fields
+                  </h3>
+                  {Object.keys(editableData).length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setEditableData({})}
+                      className="text-[11px] font-bold text-red-600 hover:text-red-700 cursor-pointer"
+                    >
+                      Clear Fields
+                    </button>
+                  )}
+                </div>
 
                 {/* Full Name */}
                 <div>
@@ -627,17 +664,19 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                       placeholder="e.g. Dr. Arthur Pendelton"
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500"
                     />
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(editableData.fullName || '', 'fullName')}
-                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700"
-                    >
-                      {copiedField === 'fullName' ? (
-                        <Check className="w-4 h-4 text-emerald-600" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                    </button>
+                    {editableData.fullName && (
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(editableData.fullName || '', 'fullName')}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700"
+                      >
+                        {copiedField === 'fullName' ? (
+                          <Check className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -653,8 +692,8 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                       onChange={(e) =>
                         setEditableData({ ...editableData, passportNumber: e.target.value.toUpperCase() })
                       }
-                      placeholder="GB98234112"
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold text-slate-900 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                      placeholder="e.g. GB98234112"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold text-slate-900 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500 uppercase"
                     />
                   </div>
 
@@ -681,7 +720,7 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                       type="text"
                       value={editableData.nationality || ''}
                       onChange={(e) => setEditableData({ ...editableData, nationality: e.target.value })}
-                      placeholder="British"
+                      placeholder="e.g. British"
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500"
                     />
                   </div>
@@ -706,10 +745,11 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                   <div>
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">Gender</label>
                     <select
-                      value={editableData.gender || 'Male'}
+                      value={editableData.gender || ''}
                       onChange={(e) => setEditableData({ ...editableData, gender: e.target.value as any })}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500"
                     >
+                      <option value="">Select Gender</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
@@ -725,7 +765,7 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
                       type="text"
                       value={editableData.occupation || ''}
                       onChange={(e) => setEditableData({ ...editableData, occupation: e.target.value })}
-                      placeholder="Archaeologist"
+                      placeholder="e.g. Archaeologist"
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500"
                     />
                   </div>
@@ -771,7 +811,12 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
               <button
                 type="button"
                 onClick={handleApply}
-                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 cursor-pointer"
+                disabled={!editableData.fullName && !editableData.passportNumber}
+                className={`px-6 py-2.5 rounded-xl text-xs font-bold shadow-md transition flex items-center gap-2 ${
+                  editableData.fullName || editableData.passportNumber
+                    ? 'bg-red-600 hover:bg-red-500 text-white hover:shadow-lg cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Apply ABBYY Verified Data to Form
@@ -783,3 +828,4 @@ export const AbbyyFineReaderPassportModal: React.FC<AbbyyFineReaderPassportModal
     </div>
   );
 };
+

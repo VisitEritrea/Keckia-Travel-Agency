@@ -876,7 +876,7 @@ export const PayrollManagementView: React.FC<PayrollManagementViewProps> = ({
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={r.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
+                            src={r.avatar?.trim() || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
                             alt={r.employeeName}
                             className="w-9 h-9 rounded-full object-cover border border-slate-200"
                           />

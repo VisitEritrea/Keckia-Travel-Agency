@@ -551,7 +551,7 @@ export const AddTicketingClientModal: React.FC<AddTicketingClientModalProps> = (
                   ) : passportDocumentName ? (
                     <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4 text-left p-2">
                       <div className="flex items-center gap-3">
-                        {passportDocumentUrl ? (
+                        {passportDocumentUrl && passportDocumentUrl.trim() !== '' ? (
                           <img
                             src={passportDocumentUrl}
                             alt="Passport preview"

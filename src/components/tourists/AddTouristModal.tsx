@@ -424,7 +424,7 @@ export const AddTouristModal: React.FC<AddTouristModalProps> = ({
               ) : scannedFileDetails ? (
                 <div className="w-full flex items-center justify-between gap-4 text-left">
                   <div className="flex items-center gap-3.5">
-                    {scannedFileDetails.previewUrl ? (
+                    {scannedFileDetails.previewUrl && scannedFileDetails.previewUrl.trim() !== '' ? (
                       <img
                         src={scannedFileDetails.previewUrl}
                         alt="Scanned Preview"

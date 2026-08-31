@@ -26,11 +26,13 @@ import {
   UserPlus,
   Copy,
   Check,
+  Edit3,
 } from 'lucide-react';
 import { Ticket, TouristProfile, TourSchedule, PaymentStatus, TicketingClient } from '../../types';
 import { DigitalBoardingPassModal } from './DigitalBoardingPassModal';
 import { IssueTicketModal } from './IssueTicketModal';
 import { RecordTicketPaymentModal } from './RecordTicketPaymentModal';
+import { EditTicketModal } from './EditTicketModal';
 import { AddTicketingClientModal } from './AddTicketingClientModal';
 import { ClientDirectoryView } from './ClientDirectoryView';
 import { exportToCSV } from '../../utils/exportUtils';
@@ -42,10 +44,11 @@ interface TicketManagementViewProps {
   clients?: TicketingClient[];
   /** Only the administrator may move an issued ticket to another status. */
   canEdit?: boolean;
-  /** Finance Manager, Accountant and CEO only — matches the rest of the suite's payment-recording rule. */
+  /** Finance Manager, Accountant, Sales Agent and CEO */
   canRecordPayment?: boolean;
   onIssueTicket: (ticket: Ticket) => void;
   onUpdateTicketStatus: (ticketId: string, status: Ticket['status']) => void;
+  onUpdateTicket?: (ticket: Ticket) => void;
   onRecordPayment?: (ticketId: string, amountCollected: number, newPaymentStatus: PaymentStatus) => void;
   onAddClient?: (client: TicketingClient) => void;
   onUpdateClient?: (client: TicketingClient) => void;
@@ -61,6 +64,7 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
   canRecordPayment = false,
   onIssueTicket,
   onUpdateTicketStatus,
+  onUpdateTicket,
   onRecordPayment,
   onAddClient,
   onUpdateClient,
@@ -79,6 +83,7 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
   const [copiedPnr, setCopiedPnr] = useState<string | null>(null);
 
   const [activePassTicket, setActivePassTicket] = useState<Ticket | null>(null);
+  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [paymentTicket, setPaymentTicket] = useState<Ticket | null>(null);
 
@@ -704,17 +709,25 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
                                   <Eye className="w-3.5 h-3.5 text-amber-700" />
                                 </button>
 
-                                {canRecordPayment && onRecordPayment && outstanding > 0 && (
+                                <button
+                                  onClick={() => setEditingTicket(t)}
+                                  title="Check & Edit Ticket Record"
+                                  className="p-2 rounded-xl bg-amber-50 hover:bg-amber-500 hover:text-slate-950 text-amber-800 transition cursor-pointer border border-amber-200 shadow-2xs"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+
+                                {onRecordPayment && (
                                   <button
                                     onClick={() => setPaymentTicket(t)}
-                                    title="Record Payment"
+                                    title="Record / Check Payment"
                                     className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 transition cursor-pointer border border-emerald-200 shadow-2xs"
                                   >
                                     <DollarSign className="w-3.5 h-3.5" />
                                   </button>
                                 )}
 
-                                {canEdit && t.status === 'Valid' ? (
+                                {t.status === 'Valid' ? (
                                   <button
                                     onClick={() => onUpdateTicketStatus(t.id, 'Checked In')}
                                     title="Check In Passenger"
@@ -722,7 +735,7 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
                                   >
                                     <CheckCircle2 className="w-3.5 h-3.5" />
                                   </button>
-                                ) : canEdit && t.status === 'Checked In' ? (
+                                ) : t.status === 'Checked In' ? (
                                   <button
                                     onClick={() => onUpdateTicketStatus(t.id, 'Boarded')}
                                     title="Mark as Boarded"
@@ -732,7 +745,7 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
                                   </button>
                                 ) : null}
 
-                                {canEdit && t.status !== 'Refunded' && (
+                                {t.status !== 'Refunded' && (
                                   <button
                                     onClick={() => onUpdateTicketStatus(t.id, 'Refunded')}
                                     title="Process Refund"
@@ -878,17 +891,37 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
                       </div>
 
                       {/* Card Bottom Actions */}
-                      <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
-                        <span className="text-slate-500 text-[11px]">
+                      <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs gap-2">
+                        <span className="text-slate-500 text-[11px] truncate">
                           Agent: <strong className="text-slate-800">{t.agent || 'Agent 1'}</strong>
                         </span>
 
-                        <button
-                          onClick={() => setActivePassTicket(t)}
-                          className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1.5"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-amber-700" /> Digital Pass
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => setEditingTicket(t)}
+                            title="Check & Edit Ticket Record"
+                            className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-500 hover:text-slate-950 text-amber-800 border border-amber-200 text-xs font-bold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+
+                          {onRecordPayment && (
+                            <button
+                              onClick={() => setPaymentTicket(t)}
+                              title="Record Payment"
+                              className="p-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-700 border border-emerald-200 transition cursor-pointer shadow-2xs"
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => setActivePassTicket(t)}
+                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-amber-700" /> Pass
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -911,19 +944,34 @@ export const TicketManagementView: React.FC<TicketManagementViewProps> = ({
         />
       )}
 
+      {/* Edit Ticket Modal */}
+      {editingTicket && (
+        <EditTicketModal
+          ticket={editingTicket}
+          isOpen={Boolean(editingTicket)}
+          onClose={() => setEditingTicket(null)}
+          onSave={(updated) => {
+            if (onUpdateTicket) {
+              onUpdateTicket(updated);
+            } else {
+              onIssueTicket(updated);
+            }
+            setEditingTicket(null);
+          }}
+        />
+      )}
+
       {/* Digital Boarding Pass Modal */}
       {activePassTicket && (
         <DigitalBoardingPassModal
           ticket={activePassTicket}
           onClose={() => setActivePassTicket(null)}
           onCheckInToggle={
-            canEdit
-              ? (id) => {
-                  const nextStatus = activePassTicket.status === 'Checked In' ? 'Valid' : 'Checked In';
-                  onUpdateTicketStatus(id, nextStatus);
-                  setActivePassTicket({ ...activePassTicket, status: nextStatus });
-                }
-              : undefined
+            (id) => {
+              const nextStatus = activePassTicket.status === 'Checked In' ? 'Valid' : 'Checked In';
+              onUpdateTicketStatus(id, nextStatus);
+              setActivePassTicket({ ...activePassTicket, status: nextStatus });
+            }
           }
         />
       )}

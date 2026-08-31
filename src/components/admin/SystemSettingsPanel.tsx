@@ -2,15 +2,20 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Building,
   CalendarDays,
+  Camera,
+  CreditCard,
   FileCheck2,
   GripVertical,
+  KeyRound,
   Layers,
   Plus,
   RotateCcw,
   Save,
+  ShieldCheck,
   Ticket as TicketIcon,
   Trash2,
   Truck,
+  Users,
   X,
 } from 'lucide-react';
 import {
@@ -22,14 +27,20 @@ import {
 } from '../../../shared/systemSettings';
 import { useSystemSettings } from '../../lib/settings';
 import { Badge, Banner, Button, Card, Field, TextInput, Toggle } from '../ui/Kit';
+import { DashboardShowcaseSettingsEditor } from './DashboardShowcaseSettingsEditor';
 
 const SECTION_ICONS: Record<SettingSectionKey, React.ComponentType<{ className?: string }>> = {
+  dashboard: Camera,
   documents: FileCheck2,
   tickets: TicketIcon,
   tours: CalendarDays,
   packages: Layers,
   hotels: Building,
   transport: Truck,
+  hr: Users,
+  finance: CreditCard,
+  audit: ShieldCheck,
+  accounts: KeyRound,
 };
 
 /* ------------------------------------------------------------------ *
@@ -164,6 +175,59 @@ const SectionEditor: React.FC<{
 
   const patch = (partial: Partial<typeof current>) =>
     onChange({ ...values, [section.key]: { ...current, ...partial } });
+
+  if (section.key === 'dashboard') {
+    return (
+      <div className="space-y-6">
+        <DashboardShowcaseSettingsEditor
+          customJson={current.texts['customDestinationsJson'] || ''}
+          onUpdateCustomJson={(json) =>
+            patch({ texts: { ...current.texts, customDestinationsJson: json } })
+          }
+          slideDuration={current.numbers['slideDurationSeconds'] ?? 6}
+          onUpdateSlideDuration={(sec) =>
+            patch({ numbers: { ...current.numbers, slideDurationSeconds: sec } })
+          }
+          autoPlay={current.toggles['autoPlaySlideshow'] ?? true}
+          onUpdateAutoPlay={(val) =>
+            patch({ toggles: { ...current.toggles, autoPlaySlideshow: val } })
+          }
+          showTigrinya={current.toggles['showTigrinyaTitles'] ?? true}
+          onUpdateShowTigrinya={(val) =>
+            patch({ toggles: { ...current.toggles, showTigrinyaTitles: val } })
+          }
+          showThumbnails={current.toggles['showThumbnailCarousel'] ?? true}
+          onUpdateShowThumbnails={(val) =>
+            patch({ toggles: { ...current.toggles, showThumbnailCarousel: val } })
+          }
+        />
+
+        {section.lists.length > 0 && (
+          <Card
+            title="Showcase Filter Categories & Regions"
+            description="Manage categories and regions available for tourist destination slides."
+          >
+            <div className="grid gap-4 xl:grid-cols-2">
+              {section.lists.map((field) => (
+                <ListEditor
+                  key={field.key}
+                  label={field.label}
+                  help={field.help}
+                  placeholder={field.placeholder}
+                  values={current.lists[field.key] ?? []}
+                  isDefault={
+                    JSON.stringify(current.lists[field.key] ?? []) === JSON.stringify(fallback.lists[field.key] ?? [])
+                  }
+                  onReset={() => patch({ lists: { ...current.lists, [field.key]: [...field.defaults] } })}
+                  onChange={(next) => patch({ lists: { ...current.lists, [field.key]: next } })}
+                />
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

@@ -11,12 +11,17 @@
  */
 
 export type SettingSectionKey =
+  | "dashboard"
   | "documents"
   | "tickets"
   | "tours"
   | "packages"
   | "hotels"
-  | "transport";
+  | "transport"
+  | "hr"
+  | "finance"
+  | "audit"
+  | "accounts";
 
 export interface ListField {
   key: string;
@@ -68,6 +73,111 @@ export interface SettingsSection {
 }
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
+  /* ---------------------------------------------------------------- */
+  {
+    key: "dashboard",
+    label: "Dashboard Showcase",
+    description:
+      "Manage picture slides, descriptive texts, highlights, and timing for the Eritrea Tourist Destinations Pictorial Showcase on the main dashboard.",
+    lists: [
+      {
+        key: "showcaseCategories",
+        label: "Showcase Categories",
+        help: "Pill filter categories available on the tourist destinations slideshow.",
+        placeholder: "e.g. Red Sea & Islands",
+        defaults: [
+          "UNESCO & Architecture",
+          "Red Sea & Islands",
+          "Archaeology & Ruins",
+          "Highlands & Escarpment",
+          "Nature & Wildlife",
+          "Cultural & Historical",
+        ],
+      },
+      {
+        key: "featuredRegions",
+        label: "Featured Regions (Zobatat)",
+        help: "Selectable regions displayed on destination slide badges.",
+        placeholder: "e.g. Northern Red Sea (Semenawi Keyih Bahri)",
+        defaults: [
+          "Central Region (Maekel)",
+          "Semenawi Keyih Bahri (Northern Red Sea)",
+          "Red Sea Coral Reefs (Dahlak)",
+          "Southern Region (Debub)",
+          "Anseba Region (Keren)",
+          "Gash-Barka Region (Barentu)",
+          "Debubawi Keyih Bahri (Southern Red Sea)",
+        ],
+      },
+    ],
+    numbers: [
+      {
+        key: "slideDurationSeconds",
+        label: "Slide Transition Timer",
+        help: "How long each destination slide stays on screen during auto-play.",
+        suffix: "seconds",
+        min: 3,
+        max: 30,
+        step: 1,
+        defaultValue: 6,
+      },
+      {
+        key: "maxHighlightsPerSlide",
+        label: "Maximum Key Highlights Shown",
+        help: "How many bullet tags to display on each destination slide overlay.",
+        suffix: "highlights",
+        min: 1,
+        max: 8,
+        step: 1,
+        defaultValue: 4,
+      },
+    ],
+    texts: [
+      {
+        key: "showcaseHeaderTitle",
+        label: "Showcase Header Title",
+        help: "The main title displayed on top of the dashboard slideshow.",
+        placeholder: "e.g. Eritrea Tourist Destinations",
+        defaultValue: "Eritrea Tourist Destinations",
+      },
+      {
+        key: "showcaseBadgeText",
+        label: "Showcase Badge Label",
+        help: "The small tag badge next to the title.",
+        placeholder: "e.g. Pictorial Showcase",
+        defaultValue: "Pictorial Showcase",
+      },
+      {
+        key: "customDestinationsJson",
+        label: "Custom Destinations Data (JSON)",
+        help: "Structured destination slide records stored in system configuration.",
+        placeholder: "[]",
+        defaultValue: "",
+      },
+    ],
+    toggles: [
+      {
+        key: "autoPlaySlideshow",
+        label: "Enable Auto-Play Slideshow by default on Dashboard load",
+        defaultValue: true,
+      },
+      {
+        key: "showTigrinyaTitles",
+        label: "Display Tigrinya script names alongside destination titles (e.g. ኣስመራ, ምጽዋዕ)",
+        defaultValue: true,
+      },
+      {
+        key: "showThumbnailCarousel",
+        label: "Show interactive thumbnail strip at the bottom of the slideshow",
+        defaultValue: true,
+      },
+      {
+        key: "enableFullscreenMode",
+        label: "Allow full-screen presentation mode for tourist destination slides",
+        defaultValue: true,
+      },
+    ],
+  },
   /* ---------------------------------------------------------------- */
   {
     key: "documents",
@@ -867,6 +977,553 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       {
         key: "blockOverdueService",
         label: "Block assignment when a service is overdue",
+        defaultValue: false,
+      },
+    ],
+  },
+  /* ---------------------------------------------------------------- */
+  {
+    key: "hr",
+    label: "Staff & HR",
+    description:
+      "Organization-wide staff policies, guide licenses, salary bands, field allowances, and onboarding requirements.",
+    lists: [
+      {
+        key: "departments",
+        label: "Company departments",
+        help: "Departments available when onboarding or organizing staff.",
+        placeholder: "e.g. 4WD Fleet & Logistics",
+        defaults: [
+          "Ministry of Tourism Certified Guides",
+          "4WD Transport Fleet & Marine Operations",
+          "Consular Visa, Permits & HR Compliance",
+          "Finance & Accounting",
+          "Ticketing & Airline Reservations",
+          "Executive Leadership & Administration",
+          "Client Concierge & VIP Relations",
+        ],
+      },
+      {
+        key: "staffRoles",
+        label: "Staff roles & designations",
+        help: "The operational roles assigned to staff members.",
+        placeholder: "e.g. Tour Guide",
+        defaults: [
+          "Tour Guide",
+          "Driver",
+          "Logistics Lead",
+          "Operations Manager",
+          "Agent",
+          "HR",
+          "Accountant",
+          "Admin",
+        ],
+      },
+      {
+        key: "employmentTypes",
+        label: "Employment contract types",
+        help: "Offered on employee dossiers and recruitment forms.",
+        placeholder: "e.g. Permanent Full-Time",
+        defaults: [
+          "Permanent Full-Time",
+          "Fixed-Term Contract",
+          "Seasonal Expedition Lead",
+          "Probationary Trainee",
+          "Part-Time Specialist",
+        ],
+      },
+      {
+        key: "salaryTiers",
+        label: "Standard salary tiers",
+        help: "Compensation bands linked to payroll calculations.",
+        placeholder: "e.g. Tier 1 - Senior Lead",
+        defaults: [
+          "Tier 1 - Senior Lead ($3,200 - $4,500)",
+          "Tier 2 - Specialist ($2,400 - $3,100)",
+          "Tier 3 - Associate ($1,500 - $2,300)",
+          "Contractor / Daily Field Rate",
+        ],
+      },
+      {
+        key: "mandatoryCertifications",
+        label: "Accreditations & certifications",
+        help: "Mandatory qualification standards tracked in staff dossiers.",
+        placeholder: "e.g. Wilderness First Responder (WFR)",
+        defaults: [
+          "Ministry of Tourism Master Guide License (No. ER-TG-xxx)",
+          "Wilderness First Responder (WFR) / Red Cross",
+          "Commercial Driver License (ታሴራ #ER-xxxx)",
+          "Marine Harbor Master Skipper Permit",
+          "Asmara UNESCO Modernist Architecture Historian Accreditation",
+          "IATA Travel & Tourism Foundation Diploma",
+        ],
+      },
+    ],
+    numbers: [
+      {
+        key: "probationPeriodMonths",
+        label: "Default probation period",
+        suffix: "months",
+        min: 1,
+        max: 12,
+        defaultValue: 3,
+      },
+      {
+        key: "maxConsecutiveTourDays",
+        label: "Maximum consecutive tour days for guide/driver",
+        suffix: "days",
+        min: 1,
+        max: 60,
+        defaultValue: 14,
+      },
+      {
+        key: "guideDailyFieldAllowanceUSD",
+        label: "Guide daily field allowance",
+        prefix: "$",
+        suffix: "USD/day",
+        min: 0,
+        defaultValue: 35,
+      },
+      {
+        key: "driverDailyFieldAllowanceUSD",
+        label: "Driver daily field allowance",
+        prefix: "$",
+        suffix: "USD/day",
+        min: 0,
+        defaultValue: 25,
+      },
+      {
+        key: "annualLeaveDays",
+        label: "Annual paid leave entitlement",
+        suffix: "days/year",
+        min: 0,
+        max: 60,
+        defaultValue: 24,
+      },
+    ],
+    texts: [
+      {
+        key: "guideLicenseIssuingAuthority",
+        label: "Guide licensing authority",
+        placeholder: "State of Eritrea Ministry of Tourism",
+        defaultValue: "State of Eritrea Ministry of Tourism — Department of Tourism Services",
+      },
+      {
+        key: "staffIdPrefix",
+        label: "Staff ID number prefix",
+        placeholder: "EV-EMP",
+        defaultValue: "EV-EMP",
+      },
+    ],
+    toggles: [
+      {
+        key: "requireMinistryGuideLicense",
+        label: "Require verified Ministry of Tourism guide license before assigning to tours",
+        defaultValue: true,
+      },
+      {
+        key: "enforceHighAltitudeMedicalClearance",
+        label: "Require annual medical clearance for high-altitude guides (Qohaito / Filfil / Mount Emba Soira)",
+        defaultValue: true,
+      },
+      {
+        key: "autoNotifyExpiringDocuments",
+        label: "Auto-notify HR 30 days before staff passports, driver licenses, or guide badges expire",
+        defaultValue: true,
+      },
+      {
+        key: "enforceFieldAllowanceOnPayroll",
+        label: "Automatically calculate and add daily field allowances to monthly payroll batch",
+        defaultValue: true,
+      },
+    ],
+  },
+  /* ---------------------------------------------------------------- */
+  {
+    key: "finance",
+    label: "Finance & Ledger",
+    description:
+      "System-wide currency exchange rates, fiscal controls, expense thresholds, dual approval limits, and receipt policies.",
+    lists: [
+      {
+        key: "activeCurrencies",
+        label: "Active billing currencies",
+        help: "Currencies accepted across invoicing, receipts, and ticketing.",
+        placeholder: "e.g. USD ($)",
+        defaults: ["USD ($)", "ERN (Nakfa)", "EUR (€)", "GBP (£)"],
+      },
+      {
+        key: "expenseCategories",
+        label: "Expense & disbursement categories",
+        help: "Used when field staff submit receipts or record tour operational costs.",
+        placeholder: "e.g. Fuel & Gas",
+        defaults: [
+          "Fuel & Gas",
+          "Hotel & Accommodation Voucher",
+          "Vehicle Maintenance & Repairs",
+          "Tourist Meals & Catering",
+          "Permit Fees & Government Stamp",
+          "Staff Field Allowances",
+          "Boat & Rail Charters",
+          "Office Operations & Telecom",
+        ],
+      },
+      {
+        key: "incomeCategories",
+        label: "Revenue streams",
+        help: "Categorization for tour invoices, deposits, and ticket sales.",
+        placeholder: "e.g. Tour Package Bookings",
+        defaults: [
+          "Tour Package Bookings",
+          "Airline Ticket Issuance",
+          "Private 4WD Charters",
+          "Visa on Arrival Processing Fees",
+          "Expedition Equipment Rental",
+          "VIP Airport Transfer Services",
+        ],
+      },
+      {
+        key: "paymentMethods",
+        label: "Accepted payment methods",
+        help: "Payment channels available when issuing receipts or settling invoices.",
+        placeholder: "e.g. Cash (USD)",
+        defaults: [
+          "Cash (USD)",
+          "Cash (ERN Nakfa)",
+          "Bank Wire (Commercial Bank of Eritrea)",
+          "Himbol Money Transfer",
+          "Credit Card (Stripe / Diaspora Gateway)",
+          "Corporate Credit Line / Invoice",
+        ],
+      },
+      {
+        key: "companyBankAccounts",
+        label: "Company bank accounts",
+        help: "Accounts displayed on client invoices and financial ledgers.",
+        placeholder: "e.g. Commercial Bank of Eritrea — USD Forex Account",
+        defaults: [
+          "Commercial Bank of Eritrea — USD Forex Account #01-284910-01",
+          "Commercial Bank of Eritrea — ERN Operational Account #02-918231-01",
+          "Himbol Financial Services Transfer Account #HFS-ASM-8812",
+        ],
+      },
+    ],
+    numbers: [
+      {
+        key: "usdToErnRate",
+        label: "Official USD to ERN Nakfa exchange rate",
+        prefix: "1 USD = ",
+        suffix: "ERN (Nfa)",
+        min: 1,
+        step: 0.1,
+        defaultValue: 15.0,
+      },
+      {
+        key: "mandatoryReceiptThresholdUSD",
+        label: "Mandatory receipt verification threshold",
+        prefix: "$",
+        suffix: "USD",
+        min: 0,
+        defaultValue: 25,
+      },
+      {
+        key: "cashTransactionLimitUSD",
+        label: "Maximum single cash transaction limit",
+        prefix: "$",
+        suffix: "USD",
+        min: 100,
+        defaultValue: 5000,
+      },
+      {
+        key: "dualApprovalThresholdUSD",
+        label: "Dual approval required above threshold",
+        prefix: "$",
+        suffix: "USD",
+        min: 100,
+        defaultValue: 1500,
+      },
+      {
+        key: "fiscalYearStartMonth",
+        label: "Fiscal year start month",
+        suffix: "(1 = Jan, 7 = Jul)",
+        min: 1,
+        max: 12,
+        defaultValue: 1,
+      },
+    ],
+    texts: [
+      {
+        key: "invoicePrefix",
+        label: "Invoice number prefix",
+        placeholder: "EV-INV",
+        defaultValue: "EV-INV",
+      },
+      {
+        key: "receiptPrefix",
+        label: "Receipt voucher prefix",
+        placeholder: "EV-RCP",
+        defaultValue: "EV-RCP",
+      },
+      {
+        key: "defaultTaxOrServiceNote",
+        label: "Tax exemption & service disclosure note",
+        placeholder: "Legal statement printed on invoices...",
+        defaultValue: "All services exempt from VAT per Ministry of Tourism Export Tourism Code 2026.",
+      },
+    ],
+    toggles: [
+      {
+        key: "lockExchangeRate",
+        label: "Lock standard USD to ERN exchange rate across all invoicing and ticketing",
+        defaultValue: true,
+      },
+      {
+        key: "requireReceiptForReimbursement",
+        label: "Strictly require uploaded receipt attachment before verifying expense reimbursements",
+        defaultValue: true,
+      },
+      {
+        key: "enforceDualApprovalHighValue",
+        label: "Enforce dual-signoff (Finance Officer + Manager) for payments exceeding threshold",
+        defaultValue: true,
+      },
+      {
+        key: "allowNegativeCashBalance",
+        label: "Allow field cash register balance to drop below zero",
+        defaultValue: false,
+      },
+    ],
+  },
+  /* ---------------------------------------------------------------- */
+  {
+    key: "audit",
+    label: "Audit & Controls",
+    description:
+      "Separation of duties (SoD), compliance policies, immutable audit trail enforcement, and risk thresholds.",
+    lists: [
+      {
+        key: "sodRestrictedCombinations",
+        label: "Separation of Duty (SoD) restricted combinations",
+        help: "Roles and capabilities that cannot be held concurrently by a single team member.",
+        placeholder: "e.g. Sales Agent + Ticket Void / Refund Approver",
+        defaults: [
+          "Sales Agent + Ticket Void / Refund Approver",
+          "Expense Submitter + Payment Release Officer",
+          "Tour Creator + Financial Ledger Settlement",
+          "Staff Account Manager + Role Permission Editor",
+        ],
+      },
+      {
+        key: "criticalAuditActions",
+        label: "Critical audit event triggers",
+        help: "Actions that generate permanent, high-priority audit logs with timestamps and IP records.",
+        placeholder: "e.g. Ticket Voided / Refunded",
+        defaults: [
+          "Ticket Voided / Refunded",
+          "Cash Receipt Verified",
+          "Dual Control Override Executed",
+          "Permission Matrix Modified",
+          "Staff Role Escalated",
+          "Client Financial Credit Issued",
+        ],
+      },
+      {
+        key: "complianceStandards",
+        label: "Compliance standards & frameworks",
+        help: "Regulatory standards enforced in system audit reports.",
+        placeholder: "e.g. Ministry of Tourism Regulatory Framework",
+        defaults: [
+          "Ministry of Tourism Regulatory Framework 2026",
+          "IATA Resolution 850m Ticketing Compliance",
+          "Eritrean Financial Intelligence Unit (FIU) Anti-Fraud Rules",
+          "EritreaVisit ISO 9001 Field Safety Protocol",
+        ],
+      },
+    ],
+    numbers: [
+      {
+        key: "maxFailedLoginAttempts",
+        label: "Maximum failed login attempts before lockout",
+        suffix: "attempts",
+        min: 3,
+        max: 10,
+        defaultValue: 5,
+      },
+      {
+        key: "sessionLockoutMinutes",
+        label: "Account lockout duration",
+        suffix: "minutes",
+        min: 1,
+        max: 120,
+        defaultValue: 15,
+      },
+      {
+        key: "valueAtRiskAlertThresholdUSD",
+        label: "High-value transaction risk alert threshold",
+        prefix: "$",
+        suffix: "USD",
+        min: 100,
+        defaultValue: 2500,
+      },
+      {
+        key: "auditLogRetentionDays",
+        label: "Audit log retention period",
+        suffix: "days",
+        min: 30,
+        max: 3650,
+        defaultValue: 365,
+      },
+    ],
+    texts: [
+      {
+        key: "sodPolicyEnforcementCode",
+        label: "SoD policy enforcement directive code",
+        placeholder: "SOD-ENFORCE-STRICT-2026",
+        defaultValue: "SOD-ENFORCE-STRICT-2026",
+      },
+      {
+        key: "auditOfficerTitle",
+        label: "Designated internal audit officer title",
+        placeholder: "Senior Compliance & Internal Control Auditor",
+        defaultValue: "Senior Compliance & Internal Control Auditor",
+      },
+    ],
+    toggles: [
+      {
+        key: "enforceImmutableAuditTrail",
+        label: "Enforce cryptographically sealed, immutable audit trail for all financial & ticketing transactions",
+        defaultValue: true,
+      },
+      {
+        key: "autoLockSoDViolations",
+        label: "Automatically block users from approving transactions they originated (SoD Conflict)",
+        defaultValue: true,
+      },
+      {
+        key: "requirePreIssueTicketChecklist",
+        label: "Require pre-issuance compliance checklist (passport valid, visa confirmed) before ticket generation",
+        defaultValue: true,
+      },
+      {
+        key: "alertOnHighValueRefunds",
+        label: "Trigger real-time audit alert whenever a ticket refund or payment void exceeds $500",
+        defaultValue: true,
+      },
+    ],
+  },
+  /* ---------------------------------------------------------------- */
+  {
+    key: "accounts",
+    label: "Staff Accounts",
+    description:
+      "Password policies, session security, multi-factor authentication (MFA), and account lifecycle rules.",
+    lists: [
+      {
+        key: "defaultAccountRoles",
+        label: "Default staff account roles",
+        help: "Pre-configured role profiles available when provisioning new staff logins.",
+        placeholder: "e.g. Sales Agent",
+        defaults: [
+          "Sales Agent",
+          "Operations Lead",
+          "Certified Tour Guide",
+          "Logistics & Fleet Driver",
+          "HR Manager",
+          "Finance Auditor",
+          "System Administrator",
+        ],
+      },
+      {
+        key: "allowedAccessTimes",
+        label: "Permitted system access schedules",
+        help: "Time windows when staff members can log into the operational workspace.",
+        placeholder: "e.g. 24/7 Unrestricted Field & Desk Access",
+        defaults: [
+          "24/7 Unrestricted Field & Desk Access",
+          "Business Hours Only (08:00 - 18:00 EAT)",
+          "Tour Dispatch Schedule Window Only",
+        ],
+      },
+      {
+        key: "twoFactorEnforcedRoles",
+        label: "Roles requiring mandatory Two-Factor Auth (2FA)",
+        help: "Privileged accounts where MFA cannot be disabled.",
+        placeholder: "e.g. Admin",
+        defaults: [
+          "Admin",
+          "Finance & Accounting",
+          "HR Compliance",
+          "Operations Manager",
+        ],
+      },
+    ],
+    numbers: [
+      {
+        key: "minPasswordLength",
+        label: "Minimum password length",
+        suffix: "characters",
+        min: 6,
+        max: 32,
+        defaultValue: 8,
+      },
+      {
+        key: "passwordExpiryDays",
+        label: "Password expiration cycle",
+        suffix: "days (0 for never)",
+        min: 0,
+        max: 365,
+        defaultValue: 90,
+      },
+      {
+        key: "idleSessionTimeoutMinutes",
+        label: "Idle session auto-logout timeout",
+        suffix: "minutes",
+        min: 5,
+        max: 480,
+        defaultValue: 60,
+      },
+      {
+        key: "maxActiveSessionsPerStaff",
+        label: "Maximum simultaneous active sessions per user",
+        suffix: "sessions",
+        min: 1,
+        max: 10,
+        defaultValue: 3,
+      },
+    ],
+    texts: [
+      {
+        key: "supportContactEmail",
+        label: "Security & IT helpdesk email",
+        placeholder: "security-ops@eritreavisit.com",
+        defaultValue: "security-ops@eritreavisit.com",
+      },
+      {
+        key: "passwordResetHelpMessage",
+        label: "Password reset instructions for staff",
+        placeholder: "Helpdesk instructions...",
+        defaultValue: "Contact the HR & IT Security Desk at Asmara HQ (Ext. 204) for hardware token or identity reset.",
+      },
+    ],
+    toggles: [
+      {
+        key: "requireMfaForFinanceAndAdmin",
+        label: "Require Two-Factor Authentication (2FA) for all Finance, Admin, and HR accounts",
+        defaultValue: true,
+      },
+      {
+        key: "autoDeactivateDormantAccounts",
+        label: "Automatically flag accounts inactive for more than 45 days for supervisor re-approval",
+        defaultValue: true,
+      },
+      {
+        key: "logAllIpAddresses",
+        label: "Capture IP address and client user agent for every login and permission change",
+        defaultValue: true,
+      },
+      {
+        key: "allowCrossRoleImpersonation",
+        label: "Allow system administrators to temporarily assume staff roles for debugging",
         defaultValue: false,
       },
     ],

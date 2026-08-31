@@ -34,7 +34,6 @@ import {
   PermitItineraryStop,
 } from './types';
 import { TouristExpedition } from './components/packages/AddTouristExpeditionModal';
-import { NEW_SAMPLE_EXPEDITION } from './components/packages/TourPackagesView';
 import { useCollection, useWorkspace } from './lib/workspace';
 import { api, setAuthToken } from './lib/api';
 import { ROLES, canView, canWrite, ADMIN_ONLY_EDIT_MESSAGE } from '../shared/roles';
@@ -185,7 +184,7 @@ export default function App() {
           medicalNotes: '',
           travelHistoryCount: c.totalBookingsCount || 1,
           status: (isVip ? 'VIP' : 'Active Traveler') as any,
-          avatar: c.avatar || '',
+          avatar: c.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
           notes: `Ticketing Client: ${c.companyOrOrg || c.notes || 'Registered Client Profile'}`,
           preferredLanguage: 'English',
         };
@@ -214,7 +213,7 @@ export default function App() {
           medicalNotes: exp.medicalNotes || '',
           travelHistoryCount: 1,
           status: exp.isVip ? 'VIP' : 'Active Traveler',
-          avatar: exp.avatar || '',
+          avatar: exp.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
           notes: `Expedition: ${exp.partyTitle || exp.routeSummary}`,
           preferredLanguage: exp.preferredLanguage || 'English',
         };
@@ -241,7 +240,7 @@ export default function App() {
             medicalNotes: m.medicalNotes || '',
             travelHistoryCount: 1,
             status: 'Active Traveler',
-            avatar: '',
+            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
             notes: `Companion with ${exp.leadName}`,
             preferredLanguage: 'English',
           };
@@ -281,7 +280,7 @@ export default function App() {
       medicalNotes: '',
       travelHistoryCount: (newClient.totalBookingsCount || 0) + 1,
       status: (isVip ? 'VIP' : 'Active Traveler') as any,
-      avatar: newClient.avatar || '',
+      avatar: newClient.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
       notes: `Ticketing Client Dossier: ${newClient.notes || newClient.companyOrOrg || 'Client Profile'}`,
       preferredLanguage: 'English',
     };
@@ -480,7 +479,7 @@ export default function App() {
       emergencyContact: exp.emergencyContact || { name: '', relation: '', phone: '' },
       travelHistoryCount: 1,
       status: exp.isVip ? 'VIP' : 'Active Traveler',
-      avatar: exp.avatar || '',
+      avatar: exp.avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
       notes: `Expedition Dossier: ${exp.partyTitle || exp.routeSummary}`,
       preferredLanguage: exp.preferredLanguage || 'English',
       scannedDocumentName: exp.passportDocName,
@@ -518,7 +517,7 @@ export default function App() {
           emergencyContact: exp.emergencyContact || { name: '', relation: '', phone: '' },
           travelHistoryCount: 1,
           status: 'Active Traveler',
-          avatar: '',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
           notes: `Travel Companion with ${exp.leadName} (${m.relationship || 'Family'})`,
           preferredLanguage: 'English',
           scannedDocumentName: m.passportDocName,
@@ -1260,7 +1259,7 @@ export default function App() {
       emergencyContact: { name: '', relation: '', phone: '' },
       travelHistoryCount: 0,
       status: 'Inquiry',
-      avatar: '',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       notes: [
         `Website enquiry ${enquiry.id} received ${new Date(enquiry.receivedAt).toLocaleDateString()}.`,
         enquiry.tourTitle ? `Interested in: ${enquiry.tourTitle}.` : '',
@@ -1372,6 +1371,20 @@ export default function App() {
       };
       setFinancialTransactions((prev) => [txn, ...prev]);
     }
+  };
+
+  const handleUpdateTicket = (updatedTicket: Ticket) => {
+    setTickets((prev) => prev.map((t) => (t.id === updatedTicket.id ? updatedTicket : t)));
+    const alert: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: `Ticket Updated: ${updatedTicket.touristName}`,
+      message: `Ticket record #${updatedTicket.ticketNumber || updatedTicket.pnr} was updated successfully.`,
+      timestamp: 'Just now',
+      read: false,
+      priority: 'normal',
+      type: 'permit_issued',
+    };
+    setNotifications((prev) => [alert, ...prev]);
   };
 
   const handleUpdateTicketStatus = (ticketId: string, status: Ticket['status']) => {
@@ -1767,8 +1780,9 @@ export default function App() {
               schedules={schedules}
               clients={ticketingClients}
               canEdit={canWrite(role, 'tickets') || canEditRecords}
-              canRecordPayment={permissions.can.recordPayment}
+              canRecordPayment={permissions.can.recordPayment || role === 'AGENT'}
               onIssueTicket={handleIssueTicket}
+              onUpdateTicket={handleUpdateTicket}
               onUpdateTicketStatus={handleUpdateTicketStatus}
               onRecordPayment={handleRecordTicketPayment}
               onAddClient={handleAddTicketingClient}

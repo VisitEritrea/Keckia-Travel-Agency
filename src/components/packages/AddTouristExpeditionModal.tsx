@@ -1469,7 +1469,7 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                     <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div className="flex items-center gap-3.5">
                         <div className="w-12 h-12 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-800 flex items-center justify-center shrink-0">
-                          {scannedFileDetails.previewUrl ? (
+                          {scannedFileDetails.previewUrl && scannedFileDetails.previewUrl.trim() !== '' ? (
                             <img
                               src={scannedFileDetails.previewUrl}
                               alt="Scanned Passport"
@@ -2248,13 +2248,69 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                           <label className="block text-[10px] font-semibold text-slate-600 mb-0.5 flex items-center gap-1">
                             <BedDouble className="w-3 h-3 text-blue-500" /> Overnight Lodging
                           </label>
-                          <input
-                            type="text"
-                            value={day.lodging || ''}
-                            onChange={(e) => handleUpdateDay(idx, { lodging: e.target.value })}
-                            placeholder="e.g. Hotel Asmara Palace"
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900"
-                          />
+                          <select
+                            value={
+                              hotels.some((h) => h.name.toLowerCase() === (day.lodging || '').toLowerCase())
+                                ? day.lodging
+                                : day.lodging === 'Wilderness Camping / Eco-Tents'
+                                ? 'camping'
+                                : day.lodging === 'Day Excursion / No Overnight'
+                                ? 'none'
+                                : day.lodging
+                                ? 'custom'
+                                : ''
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'custom') {
+                                handleUpdateDay(idx, { lodging: day.lodging || 'Custom Accommodation' });
+                              } else if (val === 'camping') {
+                                handleUpdateDay(idx, { lodging: 'Wilderness Camping / Eco-Tents' });
+                              } else if (val === 'none') {
+                                handleUpdateDay(idx, { lodging: 'Day Excursion / No Overnight' });
+                              } else if (val === '') {
+                                handleUpdateDay(idx, { lodging: '' });
+                              } else {
+                                const foundHotel = hotels.find((h) => h.name === val);
+                                handleUpdateDay(idx, {
+                                  lodging: val,
+                                  ...(foundHotel && (!day.location || day.location.trim() === '')
+                                    ? { location: `${foundHotel.city || foundHotel.region || ''}` }
+                                    : {}),
+                                });
+                              }
+                            }}
+                            className="w-full px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900 cursor-pointer font-medium"
+                          >
+                            <option value="">-- Select Hotel from Directory --</option>
+                            <optgroup label="Hotels & Lodges Directory">
+                              {hotels.map((h) => (
+                                <option key={h.id} value={h.name}>
+                                  {h.name} {h.starRating ? `(${h.starRating}★)` : ''} — {h.city || h.region}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Special Accommodations">
+                              <option value="camping">⛺ Wilderness Camping / Eco-Tents</option>
+                              <option value="none">🚫 Day Excursion / No Overnight Stay</option>
+                              <option value="custom">✏️ Other / Custom Hotel Specification...</option>
+                            </optgroup>
+                          </select>
+
+                          {/* Custom lodging input if custom option or non-listed hotel is used */}
+                          {(!hotels.some((h) => h.name.toLowerCase() === (day.lodging || '').toLowerCase()) &&
+                            day.lodging &&
+                            day.lodging !== 'Wilderness Camping / Eco-Tents' &&
+                            day.lodging !== 'Day Excursion / No Overnight') ||
+                          day.lodging === 'Custom Accommodation' ? (
+                            <input
+                              type="text"
+                              value={day.lodging || ''}
+                              onChange={(e) => handleUpdateDay(idx, { lodging: e.target.value })}
+                              placeholder="Type custom hotel or resort name..."
+                              className="w-full mt-1 px-2.5 py-1 rounded-md bg-white border border-blue-300 text-xs text-slate-900 focus:outline-hidden"
+                            />
+                          ) : null}
                         </div>
 
                         <div>
@@ -2275,16 +2331,87 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-semibold text-slate-600 mb-0.5 flex items-center gap-1">
-                            <Car className="w-3 h-3 text-emerald-500" /> Transport Mode
+                          <label className="block text-[10px] font-semibold text-slate-600 mb-0.5 flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <Car className="w-3 h-3 text-emerald-500" /> Transport Mode
+                            </span>
+                            <span className="text-[9px] text-slate-600 font-mono">Fleet Registry</span>
                           </label>
-                          <input
-                            type="text"
+                          <select
                             value={day.transport || ''}
                             onChange={(e) => handleUpdateDay(idx, { transport: e.target.value })}
-                            placeholder="e.g. Toyota Land Cruiser V8 Prado"
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900"
-                          />
+                            className="w-full px-2 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900 font-medium cursor-pointer"
+                          >
+                            <option value="">Select Transport Mode...</option>
+                            <optgroup label="🚘 Registered 4WD, Expedition Cars & Buses">
+                              {(vehicles || [])
+                                .filter((v) => v.category === 'Vehicle / 4WD / Bus' || (!v.category && !v.type?.includes('Marine') && !v.type?.includes('Railway')))
+                                .map((v) => (
+                                  <option key={v.id} value={`${v.name} (${v.plateNumber} • ${v.capacity} Pax)`}>
+                                    {v.name} ({v.plateNumber} • {v.capacity} Pax)
+                                  </option>
+                                ))}
+                              <option value="Toyota Land Cruiser V8 Prado 4WD (ER-2-18492 - 5 Pax)">
+                                Toyota Land Cruiser V8 Prado 4WD (ER-2-18492 - 5 Pax)
+                              </option>
+                              <option value="Toyota Land Cruiser 79 Series Heavy-Duty #2 (ER-2-20419 - 5 Pax)">
+                                Toyota Land Cruiser 79 Series Heavy-Duty #2 (ER-2-20419 - 5 Pax)
+                              </option>
+                              <option value="Toyota Coaster VIP 28-Seater Luxury Bus (ER-1-04821 - 28 Pax)">
+                                Toyota Coaster VIP 28-Seater Luxury Bus (ER-1-04821 - 28 Pax)
+                              </option>
+                              <option value="Toyota HiAce Grand Cabin VIP 12-Seater (ER-2-15903 - 12 Pax)">
+                                Toyota HiAce Grand Cabin VIP 12-Seater (ER-2-15903 - 12 Pax)
+                              </option>
+                            </optgroup>
+                            <optgroup label="🚤 Registered Boats & Marine Vessels (Red Sea / Dahlak)">
+                              {(vehicles || [])
+                                .filter((v) => v.category === 'Boat / Marine Vessel' || v.type?.includes('Marine') || v.type?.includes('Dhow'))
+                                .map((v) => (
+                                  <option key={v.id} value={`${v.name} (${v.plateNumber || 'Marine Port'} • ${v.capacity} Pax)`}>
+                                    {v.name} ({v.plateNumber || 'Marine Port'} • ${v.capacity} Pax)
+                                  </option>
+                                ))}
+                              <option value="Dahlak Pearl Twin-Engine Marine Cruiser 36ft (MSW-SEA-09 - 14 Pax)">
+                                Dahlak Pearl Twin-Engine Marine Cruiser 36ft (MSW-SEA-09 - 14 Pax)
+                              </option>
+                              <option value="Red Sea Marine Speedboat (2x 250HP Outboard - 8 Pax)">
+                                Red Sea Marine Speedboat (2x 250HP Outboard - 8 Pax)
+                              </option>
+                              <option value="Traditional Motorized Dahlak Dhow (MSW-DHOW-03 - 12 Pax)">
+                                Traditional Motorized Dahlak Dhow (MSW-DHOW-03 - 12 Pax)
+                              </option>
+                            </optgroup>
+                            <optgroup label="🚂 Historic Steam Locomotives & Railway">
+                              {(vehicles || [])
+                                .filter((v) => v.category === 'Railway' || v.type?.includes('Railway'))
+                                .map((v) => (
+                                  <option key={v.id} value={`${v.name} (${v.plateNumber || 'Railway Dept'})`}>
+                                    {v.name} ({v.plateNumber || 'Railway Dept'})
+                                  </option>
+                                ))}
+                              <option value="Eritrean Railway Ansaldo Historic Steam Locomotive 442 (ER-RAIL-442)">
+                                Eritrean Railway Ansaldo Historic Steam Locomotive 442 (ER-RAIL-442)
+                              </option>
+                              <option value="Asmara-Massawa Vintage Littorina Railcar (ER-RAIL-012)">
+                                Asmara-Massawa Vintage Littorina Railcar (ER-RAIL-012)
+                              </option>
+                            </optgroup>
+                            <optgroup label="🗺️ General Tour Modes">
+                              <option value="4WD Expedition Convoy (Multi-Vehicle Lead)">4WD Expedition Convoy (Multi-Vehicle Lead)</option>
+                              <option value="Historic City Walking Tour (Pedestrian)">Historic City Walking Tour (Pedestrian)</option>
+                              <option value="Airport Shuttle Transfer (HiAce VIP)">Airport Shuttle Transfer (HiAce VIP)</option>
+                              <option value="Custom Transport">Custom Unlisted Transport...</option>
+                            </optgroup>
+                          </select>
+                          {day.transport === 'Custom Transport' && (
+                            <input
+                              type="text"
+                              placeholder="Enter custom transport mode / vehicle..."
+                              onChange={(e) => handleUpdateDay(idx, { transport: e.target.value })}
+                              className="mt-1.5 w-full px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-xs text-slate-900"
+                            />
+                          )}
                         </div>
                       </div>
 
@@ -2356,14 +2483,22 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {hotels.map((h) => {
                       const isSelected = selectedHotelId === h.id;
-                      const hotelNightPrice = h.roomTypes?.[0]?.pricePerNightUSD || 160;
+                      const hotelRooms = h.roomTypes && h.roomTypes.length > 0 ? h.roomTypes : [];
+                      const hotelNightPrice = hotelRooms[0]?.pricePerNightUSD || 160;
+                      const totalAvailableRooms = hotelRooms.reduce((acc, r) => acc + (r.availableRooms ?? 1), 0);
+
                       return (
                         <button
                           key={h.id}
                           type="button"
                           onClick={() => {
                             setSelectedHotelId(h.id);
-                            setPricePerNightUSD(hotelNightPrice);
+                            if (hotelRooms.length > 0) {
+                              setRoomType(hotelRooms[0].name);
+                              setPricePerNightUSD(hotelRooms[0].pricePerNightUSD);
+                            } else {
+                              setPricePerNightUSD(hotelNightPrice);
+                            }
                           }}
                           className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between ${
                             isSelected
@@ -2379,9 +2514,12 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-500 line-clamp-1">{h.city || h.address}</p>
+                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                              {hotelRooms.length > 0 ? `${hotelRooms.length} room types • ${totalAvailableRooms} available` : 'Hotel property active'}
+                            </p>
                           </div>
                           <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-bold">
-                            <span className="text-slate-700">${hotelNightPrice} / night</span>
+                            <span className="text-slate-700">From ${hotelNightPrice} / night</span>
                             {isSelected && <span className="text-blue-700 text-[10px]">Selected ✓</span>}
                           </div>
                         </button>
@@ -2389,54 +2527,118 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                     })}
                   </div>
 
-                  {/* Room Type & Stay Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Room Category</label>
-                      <select
-                        value={roomType}
-                        onChange={(e) => setRoomType(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 cursor-pointer"
-                      >
-                        <option value="Deluxe Suite with Balcony">Deluxe Suite with Balcony</option>
-                        <option value="Executive Double Room">Executive Double Room</option>
-                        <option value="Heritage Vintage Room">Heritage Vintage Room</option>
-                        <option value="Family Interconnected Suite">Family Interconnected Suite</option>
-                        <option value="Standard Twin Room">Standard Twin Room</option>
-                      </select>
-                    </div>
+                  {/* Dynamic Room Type & Stay Details */}
+                  {(() => {
+                    const activeHotel = hotels.find((h) => h.id === selectedHotelId) || hotels[0];
+                    const activeHotelRooms = (activeHotel?.roomTypes && activeHotel.roomTypes.length > 0)
+                      ? activeHotel.roomTypes
+                      : [
+                          { id: 'rt-1', name: 'Deluxe Suite with Balcony', pricePerNightUSD: 160, pricePerNightNFA: 2400, capacity: 2, totalRooms: 10, availableRooms: 4, bedType: 'King Bed', features: ['City View', 'Air Conditioning', 'WiFi'] },
+                          { id: 'rt-2', name: 'Executive Double Room', pricePerNightUSD: 140, pricePerNightNFA: 2100, capacity: 2, totalRooms: 15, availableRooms: 7, bedType: 'Queen Bed', features: ['En-suite Bathroom', 'Balcony'] },
+                          { id: 'rt-3', name: 'Heritage Vintage Room', pricePerNightUSD: 180, pricePerNightNFA: 2700, capacity: 2, totalRooms: 8, availableRooms: 2, bedType: 'Classic Four-Poster', features: ['Colonial Architecture', 'Mini Bar'] },
+                          { id: 'rt-4', name: 'Family Interconnected Suite', pricePerNightUSD: 240, pricePerNightNFA: 3600, capacity: 4, totalRooms: 5, availableRooms: 3, bedType: '2x Double Beds', features: ['Living Room', 'Kitchenette'] },
+                          { id: 'rt-5', name: 'Standard Twin Room', pricePerNightUSD: 110, pricePerNightNFA: 1650, capacity: 2, totalRooms: 20, availableRooms: 11, bedType: 'Twin Single Beds', features: ['Work Desk', 'Garden View'] },
+                        ];
+                    const currentRoomObj = activeHotelRooms.find((r) => r.name.toLowerCase() === (roomType || '').toLowerCase()) || activeHotelRooms[0];
+                    const isExceedingInventory = currentRoomObj && roomsCount > (currentRoomObj.availableRooms ?? 99);
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Check-in Date</label>
-                      <input
-                        type="date"
-                        value={checkIn}
-                        onChange={(e) => setCheckIn(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900"
-                      />
-                    </div>
+                    return (
+                      <div className="space-y-3 pt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                              <span>Room Category</span>
+                              <span className="text-[10px] text-blue-600 font-mono">Registry Synced</span>
+                            </label>
+                            <select
+                              value={roomType}
+                              onChange={(e) => {
+                                const selected = activeHotelRooms.find((r) => r.name === e.target.value);
+                                setRoomType(e.target.value);
+                                if (selected) {
+                                  setPricePerNightUSD(selected.pricePerNightUSD);
+                                }
+                              }}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 cursor-pointer"
+                            >
+                              {activeHotelRooms.map((rt) => (
+                                <option key={rt.id || rt.name} value={rt.name}>
+                                  {rt.name} — ${rt.pricePerNightUSD}/night ({rt.availableRooms ?? rt.totalRooms ?? 1} left)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Check-out Date</label>
-                      <input
-                        type="date"
-                        value={checkOut}
-                        onChange={(e) => setCheckOut(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900"
-                      />
-                    </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Check-in Date</label>
+                            <input
+                              type="date"
+                              value={checkIn}
+                              onChange={(e) => setCheckIn(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 font-medium"
+                            />
+                          </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">Rooms Count</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={roomsCount}
-                        onChange={(e) => setRoomsCount(Math.max(1, Number(e.target.value)))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900"
-                      />
-                    </div>
-                  </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Check-out Date</label>
+                            <input
+                              type="date"
+                              value={checkOut}
+                              onChange={(e) => setCheckOut(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 font-medium"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Rooms Count</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={roomsCount}
+                              onChange={(e) => setRoomsCount(Math.max(1, Number(e.target.value)))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Room Registry Live Specifications & Inventory Card */}
+                        {currentRoomObj && (
+                          <div className="p-3.5 rounded-xl bg-blue-50/50 border border-blue-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-900">{currentRoomObj.name}</span>
+                                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-mono font-bold">
+                                  ● {currentRoomObj.availableRooms ?? currentRoomObj.totalRooms ?? 1} Available in Registry
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 text-slate-600 text-[11px]">
+                                <span>Rate: <strong>${currentRoomObj.pricePerNightUSD} USD</strong> ({(currentRoomObj.pricePerNightUSD * 15).toLocaleString()} ERN)</span>
+                                <span>•</span>
+                                <span>Bed: <strong>{currentRoomObj.bedType || 'King Bed'}</strong></span>
+                                <span>•</span>
+                                <span>Capacity: <strong>{currentRoomObj.capacity || 2} Pax</strong></span>
+                              </div>
+                              {currentRoomObj.features && currentRoomObj.features.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                  {currentRoomObj.features.map((feat, fidx) => (
+                                    <span key={fidx} className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] text-slate-700 font-medium">
+                                      ✓ {feat}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {isExceedingInventory && (
+                              <div className="px-3 py-1.5 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-[11px] font-semibold">
+                                ⚠️ Requested {roomsCount} rooms exceeds available stock ({currentRoomObj.availableRooms} vacant).
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Pricing Breakdown Card */}
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -2481,72 +2683,125 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
             <div className="space-y-6 animate-in fade-in duration-150">
               {/* Tour Guide Assignment */}
               <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-xs">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
                       <User className="w-4 h-4" />
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-900">Certified Tour Guide Assignment</h4>
-                      <p className="text-xs text-slate-500">Ministry of Tourism licensed national guide</p>
+                      <p className="text-xs text-slate-500">Ministry of Tourism licensed national guide &amp; expedition leader</p>
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-medium">Quick Pick:</span>
+                    <select
+                      value={assignedGuideId}
+                      onChange={(e) => setAssignedGuideId(e.target.value)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 cursor-pointer focus:border-emerald-500 focus:outline-hidden"
+                    >
+                      <option value="">-- Select Guide from Staff Directory --</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} ({emp.role}) {emp.languages ? `· ${emp.languages.slice(0, 2).join(', ')}` : ''}
+                        </option>
+                      ))}
+                      <option value="unassigned">Unassigned (Pending Dispatch)</option>
+                    </select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {employees
-                    .filter((e) => e.role === 'Tour Guide' || e.role === 'Admin' || true)
-                    .slice(0, 6)
-                    .map((emp) => {
-                      const isSelected = assignedGuideId === emp.id;
-                      return (
-                        <button
-                          key={emp.id}
-                          type="button"
-                          onClick={() => setAssignedGuideId(emp.id)}
-                          className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex items-center gap-3 ${
-                            isSelected
-                              ? 'bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/30'
-                              : 'bg-white border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <img
-                            src={
-                              emp.avatar ||
-                              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'
-                            }
-                            alt={emp.name}
-                            className="w-10 h-10 rounded-xl object-cover shrink-0"
-                          />
-                          <div className="min-w-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
+                  {employees.map((emp) => {
+                    const isSelected = assignedGuideId === emp.id;
+                    const isGuideRole =
+                      emp.role === 'Tour Guide' ||
+                      emp.departmentName?.toLowerCase().includes('tour') ||
+                      emp.departmentName?.toLowerCase().includes('operation');
+
+                    return (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        onClick={() => setAssignedGuideId(emp.id)}
+                        className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex items-center gap-3 relative ${
+                          isSelected
+                            ? 'bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/30'
+                            : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                        }`}
+                      >
+                        <img
+                          src={
+                            emp.avatar?.trim() ||
+                            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'
+                          }
+                          alt={emp.name}
+                          className="w-11 h-11 rounded-xl object-cover shrink-0 border border-slate-100 shadow-2xs"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
                             <h5 className="text-xs font-bold text-slate-900 truncate">{emp.name}</h5>
-                            <p className="text-[10px] text-slate-500 truncate">{emp.role}</p>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {(emp.languages || ['Tigrinya', 'English']).slice(0, 2).map((l) => (
-                                <span key={l} className="px-1.5 py-0.2 rounded bg-slate-100 text-[9px] font-mono text-slate-600">
-                                  {l}
-                                </span>
-                              ))}
-                            </div>
+                            {isGuideRole && (
+                              <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 text-[9px] font-bold">
+                                Guide
+                              </span>
+                            )}
                           </div>
-                        </button>
-                      );
-                    })}
+                          <p className="text-[10px] text-slate-500 truncate">{emp.role}</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {(emp.languages || ['Tigrinya', 'English']).slice(0, 2).map((l) => (
+                              <span key={l} className="px-1.5 py-0.2 rounded bg-slate-100 text-[9px] font-mono text-slate-600">
+                                {l}
+                              </span>
+                            ))}
+                            {emp.phone && (
+                              <span className="text-[9px] font-mono text-slate-400 truncate">
+                                📞 {emp.phone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <div className="absolute top-2.5 right-2.5 w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold">
+                            ✓
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Driver & Expedition Vehicle Assignment */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                {/* Driver */}
+                {/* Driver Selection */}
                 <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-3 shadow-xs">
-                  <div className="flex items-center gap-2">
-                    <Car className="w-4 h-4 text-blue-600" />
-                    <h4 className="text-xs font-bold text-slate-900">Lead Expedition Driver</h4>
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <Car className="w-4 h-4 text-blue-600" />
+                      <h4 className="text-xs font-bold text-slate-900">Lead Expedition Driver</h4>
+                    </div>
+                    <select
+                      value={assignedDriverId}
+                      onChange={(e) => setAssignedDriverId(e.target.value)}
+                      className="px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-bold text-slate-800 cursor-pointer"
+                    >
+                      <option value="">-- Choose Driver --</option>
+                      {employees.map((drv) => (
+                        <option key={drv.id} value={drv.id}>
+                          {drv.name} ({drv.role})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div className="space-y-2">
-                    {employees.slice(2, 5).map((drv) => {
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {employees.map((drv) => {
                       const isSelected = assignedDriverId === drv.id;
+                      const isDriverRole = (drv.role as string) === 'Driver' || drv.role === 'Logistics Lead' || drv.departmentName?.toLowerCase().includes('transport') || drv.departmentName?.toLowerCase().includes('fleet') || drv.departmentName?.toLowerCase().includes('driver');
+
                       return (
                         <button
                           key={drv.id}
@@ -2554,22 +2809,27 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                           onClick={() => setAssignedDriverId(drv.id)}
                           className={`w-full p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center justify-between ${
                             isSelected
-                              ? 'bg-blue-50 border-blue-500 font-bold text-slate-900'
+                              ? 'bg-blue-50 border-blue-500 font-bold text-slate-900 ring-1 ring-blue-500/20'
                               : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                           }`}
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             <img
                               src={
-                                drv.avatar ||
+                                drv.avatar?.trim() ||
                                 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80'
                               }
                               alt={drv.name}
-                              className="w-7 h-7 rounded-lg object-cover"
+                              className="w-8 h-8 rounded-lg object-cover shrink-0"
                             />
-                            <span className="text-xs">{drv.name}</span>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-slate-900 truncate">{drv.name}</div>
+                              <div className="text-[10px] text-slate-500 truncate">{drv.role} · {drv.phone || 'Fleet Staff'}</div>
+                            </div>
                           </div>
-                          <span className="text-[10px] text-emerald-700 font-mono">Licensed ✓</span>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isDriverRole ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                            {isDriverRole ? 'Licensed Driver ✓' : 'Staff Driver'}
+                          </span>
                         </button>
                       );
                     })}
@@ -2578,7 +2838,7 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
 
                 {/* Fleet Vehicle */}
                 <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-3 shadow-xs">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                     <div className="flex items-center gap-2">
                       <Car className="w-4 h-4 text-amber-600" />
                       <h4 className="text-xs font-bold text-slate-900">Assigned 4WD Fleet Vehicle</h4>
@@ -2590,8 +2850,8 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    {(vehicles || []).slice(0, 4).map((veh) => {
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {(vehicles || []).map((veh) => {
                       const isSelected = assignedVehicleId === veh.id;
                       return (
                         <button
@@ -2600,7 +2860,7 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                           onClick={() => setAssignedVehicleId(veh.id)}
                           className={`w-full p-2.5 rounded-xl border text-left transition cursor-pointer flex items-center justify-between ${
                             isSelected
-                              ? 'bg-amber-50 border-amber-500 font-bold text-slate-900'
+                              ? 'bg-amber-50 border-amber-500 font-bold text-slate-900 ring-1 ring-amber-500/20'
                               : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
                           }`}
                         >
@@ -2610,7 +2870,11 @@ export const AddTouristExpeditionModal: React.FC<AddTouristExpeditionModalProps>
                               Plate: {veh.plateNumber || 'N/A'} · Cap: {veh.capacity ?? 5} Pax · {veh.type || '4WD'}
                             </div>
                           </div>
-                          {isSelected && <span className="text-amber-700 text-xs font-bold">Selected ✓</span>}
+                          {isSelected ? (
+                            <span className="text-amber-700 text-xs font-bold">Selected ✓</span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">Select</span>
+                          )}
                         </button>
                       );
                     })}

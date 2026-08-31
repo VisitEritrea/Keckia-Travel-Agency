@@ -29,6 +29,7 @@ import {
   Square,
   Building,
   Download,
+  UserCheck,
 } from 'lucide-react';
 import {
   Department,
@@ -60,7 +61,9 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   // Active page state: 1 to 6, or 'all' for print / full view
   const [activePage, setActivePage] = useState<number | 'all'>(1);
 
-  // --- Page 1 State: Profile & Personal ---
+  // --- Page 1 State: Profile, Staff Role & Department ---
+  const [staffRole, setStaffRole] = useState<StaffRole>('Tour Guide');
+  const [primaryDeptId, setPrimaryDeptId] = useState<string>('dept-guides');
   const [employeeId, setEmployeeId] = useState(`EV-EMP-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
   const [employmentStatus, setEmploymentStatus] = useState<'Permanent' | 'Contract' | 'Temporary' | 'Internship' | 'Part-Time'>('Permanent');
@@ -73,6 +76,43 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleRoleChange = (newRole: StaffRole) => {
+    setStaffRole(newRole);
+    if (newRole === 'Tour Guide') {
+      setPrimaryDeptId('dept-guides');
+      setJobTitle('Senior Expedition Lead & Certified Guide');
+      setSelectedDepartments(['Tour Guide', 'Tour Operations']);
+    } else if (newRole === 'Driver') {
+      setPrimaryDeptId('dept-fleet');
+      setJobTitle('Senior 4WD Expedition & Fleet Driver');
+      setSelectedDepartments(['Transport', 'Tour Operations']);
+    } else if (newRole === 'Logistics Lead') {
+      setPrimaryDeptId('dept-fleet');
+      setJobTitle('Expedition Logistics & Equipment Lead');
+      setSelectedDepartments(['Transport', 'Tour Operations']);
+    } else if (newRole === 'Operations Manager') {
+      setPrimaryDeptId('dept-admin');
+      setJobTitle('Field Operations Manager');
+      setSelectedDepartments(['Tour Operations', 'Administration']);
+    } else if (newRole === 'Agent') {
+      setPrimaryDeptId('dept-ticketing');
+      setJobTitle('Sales & Ticketing Agent');
+      setSelectedDepartments(['Ticketing', 'Sales & Reservations']);
+    } else if (newRole === 'HR') {
+      setPrimaryDeptId('dept-hr');
+      setJobTitle('HR & Consular Liaison Officer');
+      setSelectedDepartments(['Administration']);
+    } else if (newRole === 'Accountant') {
+      setPrimaryDeptId('dept-finance');
+      setJobTitle('Finance & Ledger Accountant');
+      setSelectedDepartments(['Finance']);
+    } else if (newRole === 'Admin') {
+      setPrimaryDeptId('dept-admin');
+      setJobTitle('System Administrator');
+      setSelectedDepartments(['Administration']);
+    }
+  };
 
   const handlePhotoFile = async (file: File | null | undefined) => {
     if (!file) return;
@@ -221,10 +261,6 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
   const [hrDateReceived, setHrDateReceived] = useState(new Date().toISOString().split('T')[0]);
   const [hrOfficer, setHrOfficer] = useState('Martha Kibreab (Senior HR Compliance Officer)');
   const [hrAssignedDept, setHrAssignedDept] = useState('Licensed Tour Guides');
-  // Role and compensation -- every hire used to be saved as an identical
-  // Tier 1 / $4,200 "Senior Lead" regardless of what was actually agreed,
-  // which fed a fabricated number straight into the payroll KPI.
-  const [staffRole, setStaffRole] = useState<StaffRole>('Agent');
   const [salaryTier, setSalaryTier] = useState<SalaryTier>('Tier 3 - Associate');
   const [salaryAmount, setSalaryAmount] = useState<number | ''>(1800);
 
@@ -282,11 +318,29 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     const finalName = fullName.trim() || 'New Staff Member';
     const finalEmail = personalEmail.trim() || `${finalName.toLowerCase().replace(/\s+/g, '.')}@eritreavisit.com`;
 
-    // Map department to existing or custom
-    const matchedDept = deptList.find((d) =>
-      d.name.toLowerCase().includes(selectedDepartments[0]?.toLowerCase() || '') ||
-      d.id === 'dept-guides'
-    ) || deptList[0];
+    // Map department accurately
+    let matchedDept = deptList.find((d) => d.id === primaryDeptId || d.name.toLowerCase() === primaryDeptId.toLowerCase());
+    if (!matchedDept && selectedDepartments.length > 0) {
+      matchedDept = deptList.find((d) => d.name.toLowerCase().includes(selectedDepartments[0].toLowerCase()));
+    }
+    if (!matchedDept) {
+      if (staffRole === 'Tour Guide') {
+        matchedDept = deptList.find((d) => d.id === 'dept-guides' || d.name.toLowerCase().includes('guide')) || { id: 'dept-guides', name: 'Ministry of Tourism Certified Guides' } as any;
+      } else if (staffRole === 'Driver' || staffRole === 'Logistics Lead') {
+        matchedDept = deptList.find((d) => d.id === 'dept-fleet' || d.name.toLowerCase().includes('fleet') || d.name.toLowerCase().includes('transport')) || { id: 'dept-fleet', name: '4WD Transport Fleet & Marine Operations' } as any;
+      } else if (staffRole === 'HR') {
+        matchedDept = deptList.find((d) => d.id === 'dept-hr' || d.name.toLowerCase().includes('hr')) || { id: 'dept-hr', name: 'Consular Visa, Permits & HR Compliance' } as any;
+      } else if (staffRole === 'Agent') {
+        matchedDept = deptList.find((d) => d.id === 'dept-ticketing' || d.name.toLowerCase().includes('ticket')) || { id: 'dept-ticketing', name: 'Ticketing & Airline Reservations' } as any;
+      } else if (staffRole === 'Accountant') {
+        matchedDept = deptList.find((d) => d.id === 'dept-finance' || d.name.toLowerCase().includes('finance')) || { id: 'dept-finance', name: 'Finance & Accounting' } as any;
+      } else {
+        matchedDept = deptList.find((d) => d.id === 'dept-admin') || deptList[0] || { id: 'dept-admin', name: 'Executive Leadership & Administration' } as any;
+      }
+    }
+
+    const finalDeptName = matchedDept?.name || selectedDepartments[0] || deptOther || 'General Operations';
+    const finalDeptId = matchedDept?.id || 'dept-gen';
 
     const onboardingData: EmployeeOnboardingData = {
       profile: {
@@ -416,8 +470,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       role: staffRole,
       email: finalEmail,
       phone: mobileNumber,
-      departmentId: matchedDept?.id || '',
-      departmentName: matchedDept?.name || selectedDepartments[0] || deptOther || 'Unassigned',
+      departmentId: finalDeptId,
+      departmentName: finalDeptName,
       salaryTier,
       salaryAmount: Number(salaryAmount) || 0,
       hireDate: dateOfJoining || new Date().toISOString().split('T')[0],
@@ -616,9 +670,80 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
               </div>
             </div>
 
-            {/* Department */}
+            {/* Staff Role & Operational Designation */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-2">Department:</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <UserCheck className="w-3.5 h-3.5 text-[#134E6F]" /> Staff Role & Operational Designation:
+                </span>
+                <span className="text-[10px] text-amber-700 font-mono font-bold uppercase bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                  Role: {staffRole}
+                </span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['Tour Guide', 'Driver', 'Logistics Lead', 'Operations Manager', 'Agent', 'HR', 'Accountant', 'Admin'] as StaffRole[]).map((r) => {
+                  const isSelected = staffRole === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => handleRoleChange(r)}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold text-left transition flex items-center justify-between border cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#134E6F] text-white border-[#134E6F] shadow-xs ring-2 ring-[#134E6F]/20'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className="truncate">{r}</span>
+                      {isSelected && <span className="text-[10px] text-amber-300 ml-1">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Primary Department */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Building className="w-3.5 h-3.5 text-[#134E6F]" /> Primary Assigned Department:
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">Organization Unit</span>
+              </label>
+              <select
+                value={primaryDeptId}
+                onChange={(e) => {
+                  setPrimaryDeptId(e.target.value);
+                  const matched = deptList.find((d) => d.id === e.target.value);
+                  if (matched && !selectedDepartments.includes(matched.name)) {
+                    setSelectedDepartments((prev) => [matched.name, ...prev]);
+                  }
+                }}
+                className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-bold text-slate-900 focus:bg-white cursor-pointer"
+              >
+                {deptList.length > 0 ? (
+                  deptList.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code || d.id})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="dept-guides">Ministry of Tourism Certified Guides (DG-TG)</option>
+                    <option value="dept-fleet">4WD Transport Fleet & Marine Operations (FLT-OPS)</option>
+                    <option value="dept-hr">Consular Visa, Permits & HR Compliance (HR-VISA)</option>
+                    <option value="dept-finance">Finance & Accounting (FIN-ACC)</option>
+                    <option value="dept-ticketing">Ticketing & Airline Reservations (TKT-AIR)</option>
+                    <option value="dept-admin">Executive Leadership & Administration (EXEC-ADM)</option>
+                    <option value="dept-vip">Client Concierge & VIP Relations (VIP-REL)</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* Department Checkboxes */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-2">Cross-Department Authorizations:</label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs text-slate-800">
                 {[
                   'Administration',
@@ -701,7 +826,7 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             }}
             className="group flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 hover:border-[#134E6F]/50 rounded-3xl bg-slate-50/70 text-center cursor-pointer transition"
           >
-            {photoUrl ? (
+            {photoUrl && photoUrl.trim() !== '' ? (
               <div className="relative mb-2">
                 <img
                   src={photoUrl}

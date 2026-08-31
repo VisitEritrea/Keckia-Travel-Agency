@@ -515,7 +515,7 @@ export const ReceiptStoreVerificationView: React.FC<ReceiptStoreVerificationView
                   <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 h-32 mb-3 group cursor-pointer"
                     onClick={() => setSelectedReceiptForInspect(receipt)}
                   >
-                    {receipt.receiptImageUrl ? (
+                    {receipt.receiptImageUrl && receipt.receiptImageUrl.trim() !== '' ? (
                       <img
                         src={receipt.receiptImageUrl}
                         alt={receipt.vendorName}
@@ -750,7 +750,7 @@ export const ReceiptStoreVerificationView: React.FC<ReceiptStoreVerificationView
               {/* Left Column: High-Res Image Preview */}
               <div className="md:col-span-5 space-y-3">
                 <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 relative group aspect-3/4 flex items-center justify-center">
-                  {selectedReceiptForInspect.receiptImageUrl ? (
+                  {selectedReceiptForInspect.receiptImageUrl && selectedReceiptForInspect.receiptImageUrl.trim() !== '' ? (
                     <img
                       src={selectedReceiptForInspect.receiptImageUrl}
                       alt={selectedReceiptForInspect.vendorName}
@@ -1036,7 +1036,7 @@ export const ReceiptStoreVerificationView: React.FC<ReceiptStoreVerificationView
                   dropzoneActive ? 'border-amber-500 bg-amber-50' : 'border-slate-300 hover:border-amber-500 bg-slate-50'
                 }`}
               >
-                {uploadFilePreview && !uploadFilePreview.startsWith('data:application/pdf') ? (
+                {uploadFilePreview && uploadFilePreview.trim() !== '' && !uploadFilePreview.startsWith('data:application/pdf') ? (
                   <img
                     src={uploadFilePreview}
                     alt="Receipt preview"

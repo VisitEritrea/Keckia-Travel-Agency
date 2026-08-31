@@ -280,7 +280,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                 >
                   {/* Channel Avatar */}
                   <div className="relative shrink-0 mt-0.5">
-                    {channel.avatar ? (
+                    {channel.avatar && channel.avatar.trim() !== '' ? (
                       <img
                         src={channel.avatar}
                         alt={channel.name}
@@ -347,7 +347,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
           {/* Chat Header */}
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/40">
             <div className="flex items-center gap-3 min-w-0">
-              {activeChannel.avatar ? (
+              {activeChannel.avatar && activeChannel.avatar.trim() !== '' ? (
                 <img
                   src={activeChannel.avatar}
                   alt={activeChannel.name}
@@ -431,7 +431,7 @@ export const MessagesView: React.FC<MessagesViewProps> = ({
                     className={`flex items-start gap-3 group ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
                   >
                     {/* Avatar */}
-                    {msg.senderAvatar ? (
+                    {msg.senderAvatar && msg.senderAvatar.trim() !== '' ? (
                       <img
                         src={msg.senderAvatar}
                         alt={msg.senderName}

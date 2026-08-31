@@ -197,12 +197,8 @@ export const SessionGate: React.FC<{ children: React.ReactNode }> = ({ children 
         sampleDataDecided: Boolean(data?.sampleDataDecided),
       };
       setBootstrap(safeBootstrap);
-      const isEmpty = Object.values(safeCollections).every((rows) => !rows || rows.length === 0);
-      // The offer is made once. If this workspace has already loaded the sample
-      // set — or deliberately cleared it — an empty workspace is the intended
-      // state and the offer must not come back.
-      const offerStarter = isEmpty && signedIn?.role === 'CEO' && !data?.sampleDataDecided;
-      setPhase(offerStarter ? 'starter' : 'ready');
+      // Workspace starts clean and ready immediately without forcing sample data
+      setPhase('ready');
     } catch (err: any) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setAuthToken(null);
@@ -210,10 +206,10 @@ export const SessionGate: React.FC<{ children: React.ReactNode }> = ({ children 
         setBootstrap(null);
         setPhase('anonymous');
       } else {
-        // Safe offline / fallback initialization
+        // Safe offline / fallback initialization with clean empty collections
         setBootstrap({
           user: signedIn,
-          collections: STARTER_COLLECTIONS,
+          collections: {},
           readable: Object.keys(STARTER_COLLECTIONS),
           sampleDataDecided: true,
         });

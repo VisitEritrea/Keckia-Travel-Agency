@@ -260,7 +260,7 @@ export const ImageUploadField: React.FC<{
           ${shape === "square" ? "aspect-square w-28" : "aspect-video w-full"}
           ${dragOver ? "border-brand-500 bg-brand-50" : value ? "border-transparent" : "border-slate-300 hover:border-brand-400 bg-slate-50"}`}
       >
-        {value ? (
+        {value && value.trim() !== "" ? (
           <>
             <img src={value} alt="" className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
@@ -545,7 +545,7 @@ export const Avatar: React.FC<{
   name: string;
   className?: string;
 }> = ({ src, name, className = "w-10 h-10 rounded-xl" }) => {
-  if (src) {
+  if (src && src.trim() !== "") {
     return <img src={src} alt={name} className={`object-cover ${className}`} />;
   }
   return (

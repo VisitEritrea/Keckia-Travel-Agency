@@ -180,7 +180,7 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
         <div id="printable-vehicle-details" className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1 text-xs">
           {/* Top Asset Photo & Summary Banner */}
           <div className="flex flex-col sm:flex-row gap-4 items-center bg-slate-50 p-4 rounded-2xl border border-slate-200">
-            {vehicle.image ? (
+            {vehicle.image && vehicle.image.trim() !== '' ? (
               <img
                 src={vehicle.image}
                 alt={vehicle.name}
